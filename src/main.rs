@@ -31,4 +31,6 @@ fn main() {
                 .build(),
         )
         .build();
+
+    leaderboard_pipeline.run().unwrap()
 }
