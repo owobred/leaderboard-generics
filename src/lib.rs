@@ -361,12 +361,12 @@ where
 {
     pub fn append<N: Filter<Message = M>>(
         self,
-        v: N,
+        next: N,
     ) -> StaticFilterSet<H, StaticFilterSet<N, NullFilter<M>, M>, M> {
         StaticFilterSet {
             head: self.head,
             next: StaticFilterSet {
-                head: v,
+                head: next,
                 next: NullFilter::new(),
             },
         }
