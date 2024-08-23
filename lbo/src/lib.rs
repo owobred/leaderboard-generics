@@ -168,10 +168,38 @@ pub struct MetadataAttached<Message, Metadata> {
     pub metadata: Metadata,
 }
 
+impl<Message, Metadata> Clone for MetadataAttached<Message, Metadata>
+where
+    Message: Clone,
+    Metadata: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            message: self.message.clone(),
+            metadata: self.metadata.clone(),
+        }
+    }
+}
+
 pub struct MetricsAttached<Message, Metadata, Metrics> {
     pub message: Message,
     pub metadata: Metadata,
     pub metrics: Metrics,
+}
+
+impl<Message, Metadata, Metrics> Clone for MetricsAttached<Message, Metadata, Metrics>
+where
+    Message: Clone,
+    Metadata: Clone,
+    Metrics: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            message: self.message.clone(),
+            metadata: self.metadata.clone(),
+            metrics: self.metrics.clone(),
+        }
+    }
 }
 
 pub struct FilterChainBuilder<M> {
