@@ -18,7 +18,7 @@ async fn main() {
         .spawn_source(DiscordMessageSource::new())
         .build();
 
-    let (leaderbord, leaderboards_handle) = AsyncLeaderboardSetBuilder::new()
+    let (leaderboards, leaderboards_handle) = AsyncLeaderboardSetBuilder::new()
         .spawn_leaderboard(Overall::new())
         .spawn_leaderboard(BitsOnly::new())
         .build();
@@ -34,7 +34,7 @@ async fn main() {
         )
         .metadata(MetadataProcessor::new())
         .metrics(MetricsProcessor::new())
-        .leaderboard(leaderbord)
+        .leaderboard(leaderboards)
         .build();
 
     leaderboard_pipeline.run().unwrap();
