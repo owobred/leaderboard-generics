@@ -5,7 +5,6 @@ use elo_lbo::{
         filters::OptoutFilter,
         leaderboards::{BitsOnly, Overall},
         metadata::MetadataProcessor,
-        metrics::MetricsProcessor,
         sources::{DiscordMessageSource, TwitchMessageSource},
     },
 };
@@ -37,7 +36,6 @@ async fn main() {
             // then use `.append(...)` to add more to the static filter set
         )
         .metadata(MetadataProcessor::new())
-        .metrics(MetricsProcessor::new())
         .leaderboard(leaderboards)
         .build();
 

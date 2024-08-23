@@ -1,33 +1,28 @@
-pub struct PipelineBuilder<S, F, MetaAttach, MetrAttach, L, Msg, Metadata, Metrics>
+pub struct PipelineBuilder<S, F, MetaAttach, L, Msg, Metadata>
 where
     S: MessageSource<Message = Msg>,
     F: Filter<Message = Msg>,
     MetaAttach: MetadataAttacher<Message = Msg, Metadata = Metadata>,
-    MetrAttach: MetricsAttacher<Message = Msg, Metadata = Metadata, Metrics = Metrics>,
-    L: Leaderboard<Message = Msg, Metadata = Metadata, Metrics = Metrics>,
+    L: Leaderboard<Message = Msg, Metadata = Metadata>,
 {
     source: Option<S>,
     filter: Option<F>,
     metadata_attacher: Option<MetaAttach>,
-    metrics_attacher: Option<MetrAttach>,
     leaderboard: Option<L>,
 }
 
-impl<S, F, MetaAttach, MetrAttach, L, Msg, Metadata, Metrics>
-    PipelineBuilder<S, F, MetaAttach, MetrAttach, L, Msg, Metadata, Metrics>
+impl<S, F, MetaAttach, L, Msg, Metadata> PipelineBuilder<S, F, MetaAttach, L, Msg, Metadata>
 where
     S: MessageSource<Message = Msg>,
     F: Filter<Message = Msg>,
     MetaAttach: MetadataAttacher<Message = Msg, Metadata = Metadata>,
-    MetrAttach: MetricsAttacher<Message = Msg, Metadata = Metadata, Metrics = Metrics>,
-    L: Leaderboard<Message = Msg, Metadata = Metadata, Metrics = Metrics>,
+    L: Leaderboard<Message = Msg, Metadata = Metadata>,
 {
     pub fn new() -> Self {
         Self {
             source: None,
             filter: None,
             metadata_attacher: None,
-            metrics_attacher: None,
             leaderboard: None,
         }
     }
@@ -47,63 +42,46 @@ where
         self
     }
 
-    pub fn metrics(mut self, metrics: MetrAttach) -> Self {
-        self.metrics_attacher = Some(metrics);
-        self
-    }
-
     pub fn leaderboard(mut self, leaderboard: L) -> Self {
         self.leaderboard = Some(leaderboard);
         self
     }
 
-    pub fn build(self) -> Pipeline<S, F, MetaAttach, MetrAttach, L, Msg, Metadata, Metrics> {
+    pub fn build(self) -> Pipeline<S, F, MetaAttach, L, Msg, Metadata> {
         Pipeline::new(
             self.source.unwrap(),
             self.filter.unwrap(),
             self.metadata_attacher.unwrap(),
-            self.metrics_attacher.unwrap(),
             self.leaderboard.unwrap(),
         )
     }
 }
 
-pub struct Pipeline<S, F, MetaAttach, MetrAttach, L, Msg, Metadata, Metrics>
+pub struct Pipeline<S, F, MetaAttach, L, Msg, Metadata>
 where
     S: MessageSource<Message = Msg>,
     F: Filter<Message = Msg>,
     MetaAttach: MetadataAttacher<Message = Msg, Metadata = Metadata>,
-    MetrAttach: MetricsAttacher<Message = Msg, Metadata = Metadata, Metrics = Metrics>,
-    L: Leaderboard<Message = Msg, Metadata = Metadata, Metrics = Metrics>,
+    L: Leaderboard<Message = Msg, Metadata = Metadata>,
 {
     source: S,
     filter: F,
     metadata_attacher: MetaAttach,
-    metrics_attacher: MetrAttach,
     leaderboard: L,
 }
 
-impl<S, F, MetaAttach, MetrAttach, L, Msg, Metadata, Metrics>
-    Pipeline<S, F, MetaAttach, MetrAttach, L, Msg, Metadata, Metrics>
+impl<S, F, MetaAttach, L, Msg, Metadata> Pipeline<S, F, MetaAttach, L, Msg, Metadata>
 where
     S: MessageSource<Message = Msg>,
     F: Filter<Message = Msg>,
     MetaAttach: MetadataAttacher<Message = Msg, Metadata = Metadata>,
-    MetrAttach: MetricsAttacher<Message = Msg, Metadata = Metadata, Metrics = Metrics>,
-    L: Leaderboard<Message = Msg, Metadata = Metadata, Metrics = Metrics>,
+    L: Leaderboard<Message = Msg, Metadata = Metadata>,
 {
-    pub fn new(
-        source: S,
-        filter: F,
-        metadata_attacher: MetaAttach,
-        metrics_attacher: MetrAttach,
-        leaderboard: L,
-    ) -> Self {
+    pub fn new(source: S, filter: F, metadata_attacher: MetaAttach, leaderboard: L) -> Self {
         Self {
             source,
             filter,
             metadata_attacher,
-            metrics_attacher,
             leaderboard,
         }
     }
@@ -115,7 +93,6 @@ where
             }
 
             let msg = self.metadata_attacher.attach_metadata(msg);
-            let msg = self.metrics_attacher.attach_metrics(msg);
 
             self.leaderboard.update(&msg);
         }
@@ -123,16 +100,19 @@ where
         Ok(())
     }
 }
+
 pub trait MessageSource {
     type Message;
 
     fn next_message(&mut self) -> Option<Self::Message>;
 }
+
 pub trait Filter {
     type Message;
 
     fn keep_message(&self, message: &Self::Message) -> bool;
 }
+
 pub trait MetadataAttacher {
     type Message;
     type Metadata;
@@ -142,25 +122,12 @@ pub trait MetadataAttacher {
         message: Self::Message,
     ) -> MetadataAttached<Self::Message, Self::Metadata>;
 }
-pub trait MetricsAttacher {
-    type Message;
-    type Metadata;
-    type Metrics;
 
-    fn attach_metrics(
-        &self,
-        message: MetadataAttached<Self::Message, Self::Metadata>,
-    ) -> MetricsAttached<Self::Message, Self::Metadata, Self::Metrics>;
-}
 pub trait Leaderboard {
     type Message;
     type Metadata;
-    type Metrics;
 
-    fn update(
-        &mut self,
-        performance: &MetricsAttached<Self::Message, Self::Metadata, Self::Metrics>,
-    );
+    fn update(&mut self, performance: &MetadataAttached<Self::Message, Self::Metadata>);
 }
 
 pub struct MetadataAttached<Message, Metadata> {
@@ -177,27 +144,6 @@ where
         Self {
             message: self.message.clone(),
             metadata: self.metadata.clone(),
-        }
-    }
-}
-
-pub struct MetricsAttached<Message, Metadata, Metrics> {
-    pub message: Message,
-    pub metadata: Metadata,
-    pub metrics: Metrics,
-}
-
-impl<Message, Metadata, Metrics> Clone for MetricsAttached<Message, Metadata, Metrics>
-where
-    Message: Clone,
-    Metadata: Clone,
-    Metrics: Clone,
-{
-    fn clone(&self) -> Self {
-        Self {
-            message: self.message.clone(),
-            metadata: self.metadata.clone(),
-            metrics: self.metrics.clone(),
         }
     }
 }
@@ -323,11 +269,11 @@ where
     }
 }
 
-pub struct LeaderboardSetBuilder<Msg, Meta, Metr> {
-    leaderboards: Vec<Box<dyn Leaderboard<Message = Msg, Metadata = Meta, Metrics = Metr>>>,
+pub struct LeaderboardSetBuilder<Msg, Meta> {
+    leaderboards: Vec<Box<dyn Leaderboard<Message = Msg, Metadata = Meta>>>,
 }
 
-impl<Msg, Meta, Metr> LeaderboardSetBuilder<Msg, Meta, Metr> {
+impl<Msg, Meta> LeaderboardSetBuilder<Msg, Meta> {
     pub fn new() -> Self {
         Self {
             leaderboards: Vec::new(),
@@ -336,39 +282,33 @@ impl<Msg, Meta, Metr> LeaderboardSetBuilder<Msg, Meta, Metr> {
 
     pub fn add_leaderboard(
         mut self,
-        leaderboard: impl Leaderboard<Message = Msg, Metadata = Meta, Metrics = Metr> + 'static,
+        leaderboard: impl Leaderboard<Message = Msg, Metadata = Meta> + 'static,
     ) -> Self {
-        self.leaderboards.push(Box::new(leaderboard)
-            as Box<dyn Leaderboard<Message = Msg, Metadata = Meta, Metrics = Metr>>);
+        self.leaderboards
+            .push(Box::new(leaderboard) as Box<dyn Leaderboard<Message = Msg, Metadata = Meta>>);
         self
     }
 
-    pub fn build(self) -> LeaderboardSet<Msg, Meta, Metr> {
+    pub fn build(self) -> LeaderboardSet<Msg, Meta> {
         LeaderboardSet::new(self.leaderboards)
     }
 }
 
-pub struct LeaderboardSet<Msg, Meta, Metr> {
-    leaderboards: Vec<Box<dyn Leaderboard<Message = Msg, Metadata = Meta, Metrics = Metr>>>,
+pub struct LeaderboardSet<Msg, Meta> {
+    leaderboards: Vec<Box<dyn Leaderboard<Message = Msg, Metadata = Meta>>>,
 }
 
-impl<Msg, Meta, Metr> LeaderboardSet<Msg, Meta, Metr> {
-    fn new(
-        leaderboards: Vec<Box<dyn Leaderboard<Message = Msg, Metadata = Meta, Metrics = Metr>>>,
-    ) -> Self {
+impl<Msg, Meta> LeaderboardSet<Msg, Meta> {
+    fn new(leaderboards: Vec<Box<dyn Leaderboard<Message = Msg, Metadata = Meta>>>) -> Self {
         Self { leaderboards }
     }
 }
 
-impl<Msg, Meta, Metr> Leaderboard for LeaderboardSet<Msg, Meta, Metr> {
+impl<Msg, Meta> Leaderboard for LeaderboardSet<Msg, Meta> {
     type Message = Msg;
     type Metadata = Meta;
-    type Metrics = Metr;
 
-    fn update(
-        &mut self,
-        performance: &MetricsAttached<Self::Message, Self::Metadata, Self::Metrics>,
-    ) {
+    fn update(&mut self, performance: &MetadataAttached<Self::Message, Self::Metadata>) {
         for leaderboard in &mut self.leaderboards {
             leaderboard.update(performance);
         }
