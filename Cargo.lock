@@ -3,5 +3,9 @@
 version = 3
 
 [[package]]
+name = "elo-lbo"
+version = "0.1.0"
+
+[[package]]
 name = "lbo"
 version = "0.1.0"
