@@ -26,9 +26,13 @@ async fn main() {
     let leaderboard_pipeline = PipelineBuilder::new()
         .source(sources)
         .filter(
+            // One option is to use the following, which uses
+            // dynamic dispatch for the filter chain
             // FilterChainBuilder::new()
             // .add_filter(OptoutFilter::new())
             // .build(),
+            // Alternatively, you can use [StaticFilterSet] to use
+            // static dispatch
             StaticFilterSet::new(OptoutFilter::new()),
             // then use `.append(...)` to add more to the static filter set
         )
