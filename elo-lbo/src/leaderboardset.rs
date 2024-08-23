@@ -1,19 +1,19 @@
-use lbo::{Leaderboard, MetadataAttached};
+use lbo::{Leaderboard, PerformanceAttached};
 
-pub struct AsyncLeaderboardSetBuilder<Message, Metadata>
+pub struct AsyncLeaderboardSetBuilder<Message, Performance>
 where
     Message: Clone + Send + Sync + 'static,
-    Metadata: Clone + Send + Sync + 'static,
+    Performance: Clone + Send + Sync + 'static,
 {
-    performance_send: tokio::sync::broadcast::Sender<MetadataAttached<Message, Metadata>>,
-    performance_recv: tokio::sync::broadcast::Receiver<MetadataAttached<Message, Metadata>>,
+    performance_send: tokio::sync::broadcast::Sender<PerformanceAttached<Message, Performance>>,
+    performance_recv: tokio::sync::broadcast::Receiver<PerformanceAttached<Message, Performance>>,
     joinset: tokio::task::JoinSet<()>,
 }
 
-impl<Message, Metadata> AsyncLeaderboardSetBuilder<Message, Metadata>
+impl<Message, Performance> AsyncLeaderboardSetBuilder<Message, Performance>
 where
     Message: Clone + Send + Sync + 'static,
-    Metadata: Clone + Send + Sync + 'static,
+    Performance: Clone + Send + Sync + 'static,
 {
     pub fn new() -> Self {
         let (performance_send, performance_recv) = tokio::sync::broadcast::channel(1_000_000);
@@ -27,7 +27,10 @@ where
 
     pub fn spawn_leaderboard(
         mut self,
-        leaderboard: impl Leaderboard<Message = Message, Metadata = Metadata> + Send + Sync + 'static,
+        leaderboard: impl Leaderboard<Message = Message, Performance = Performance>
+            + Send
+            + Sync
+            + 'static,
     ) -> Self {
         self.joinset.spawn(leaderboard_task(
             leaderboard,
@@ -39,7 +42,7 @@ where
     pub fn build(
         self,
     ) -> (
-        AsyncLeaderboardSet<Message, Metadata>,
+        AsyncLeaderboardSet<Message, Performance>,
         AsyncLeaderboardsHandle,
     ) {
         (
@@ -53,36 +56,36 @@ where
     }
 }
 
-async fn leaderboard_task<S, Message, Metadata>(
+async fn leaderboard_task<S, Message, Performance>(
     mut leaderboard: S,
-    mut broadcast: tokio::sync::broadcast::Receiver<MetadataAttached<Message, Metadata>>,
+    mut broadcast: tokio::sync::broadcast::Receiver<PerformanceAttached<Message, Performance>>,
 ) where
-    S: Leaderboard<Message = Message, Metadata = Metadata>,
+    S: Leaderboard<Message = Message, Performance = Performance>,
     Message: Clone + Send + Sync + 'static,
-    Metadata: Clone + Send + Sync + 'static,
+    Performance: Clone + Send + Sync + 'static,
 {
     while let Ok(msg) = broadcast.recv().await {
         leaderboard.update(&msg);
     }
 }
 
-pub struct AsyncLeaderboardSet<Message, Metadata>
+pub struct AsyncLeaderboardSet<Message, Performance>
 where
     Message: Clone + Send + Sync + 'static,
-    Metadata: Clone + Send + Sync + 'static,
+    Performance: Clone + Send + Sync + 'static,
 {
-    performance_send: tokio::sync::broadcast::Sender<MetadataAttached<Message, Metadata>>,
+    performance_send: tokio::sync::broadcast::Sender<PerformanceAttached<Message, Performance>>,
 }
 
-impl<Message, Metadata> Leaderboard for AsyncLeaderboardSet<Message, Metadata>
+impl<Message, Performance> Leaderboard for AsyncLeaderboardSet<Message, Performance>
 where
     Message: Clone + Send + Sync + 'static,
-    Metadata: Clone + Send + Sync + 'static,
+    Performance: Clone + Send + Sync + 'static,
 {
     type Message = Message;
-    type Metadata = Metadata;
+    type Performance = Performance;
 
-    fn update(&mut self, performance: &MetadataAttached<Self::Message, Self::Metadata>) {
+    fn update(&mut self, performance: &PerformanceAttached<Self::Message, Self::Performance>) {
         self.performance_send
             .send(performance.to_owned())
             .ok()

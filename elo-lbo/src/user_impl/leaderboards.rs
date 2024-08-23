@@ -1,4 +1,4 @@
-use lbo::{Leaderboard, MetadataAttached};
+use lbo::{Leaderboard, PerformanceAttached};
 
 #[derive(Clone)]
 pub struct BitsOnly;
@@ -11,9 +11,9 @@ impl BitsOnly {
 
 impl Leaderboard for BitsOnly {
     type Message = super::sources::SharedMessage;
-    type Metadata = super::metadata::Metadata;
+    type Performance = super::performance::Performance;
 
-    fn update(&mut self, _: &MetadataAttached<Self::Message, Self::Metadata>) {
+    fn update(&mut self, _: &PerformanceAttached<Self::Message, Self::Performance>) {
         todo!()
     }
 }
@@ -29,9 +29,9 @@ impl Overall {
 
 impl Leaderboard for Overall {
     type Message = super::sources::SharedMessage;
-    type Metadata = super::metadata::Metadata;
+    type Performance = super::performance::Performance;
 
-    fn update(&mut self, _: &MetadataAttached<Self::Message, Self::Metadata>) {
+    fn update(&mut self, _: &PerformanceAttached<Self::Message, Self::Performance>) {
         todo!()
     }
 }
