@@ -126,7 +126,7 @@ where
 pub trait MessageSource {
     type Message;
 
-    fn next_message(&self) -> Option<Self::Message>;
+    fn next_message(&mut self) -> Option<Self::Message>;
 }
 pub trait Filter {
     type Message;

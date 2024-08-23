@@ -1,18 +1,24 @@
-use elo_lbo::user_impl::{
-    filters::OptoutFilter,
-    leaderboards::{BitsOnly, Overall},
-    metadata::MetadataProcessor,
-    metrics::MetricsProcessor,
-    sources::TwitchMessageSource,
+use elo_lbo::{
+    sourceset::AsyncSourcesBuilder,
+    user_impl::{
+        filters::OptoutFilter,
+        leaderboards::{BitsOnly, Overall},
+        metadata::MetadataProcessor,
+        metrics::MetricsProcessor,
+        sources::{DiscordMessageSource, TwitchMessageSource},
+    },
 };
 use lbo::{LeaderboardSetBuilder, PipelineBuilder, StaticFilterSet};
 
-fn main() {
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
+    let (sources, sources_handle) = AsyncSourcesBuilder::new()
+        .spawn_source(TwitchMessageSource::new())
+        .spawn_source(DiscordMessageSource::new())
+        .build();
+
     let leaderboard_pipeline = PipelineBuilder::new()
-        .source(
-            TwitchMessageSource::new(),
-            // TODO: add AsyncMpscSource here
-        )
+        .source(sources)
         .filter(
             // FilterChainBuilder::new()
             // .add_filter(OptoutFilter::new())
@@ -30,5 +36,6 @@ fn main() {
         )
         .build();
 
-    leaderboard_pipeline.run().unwrap()
+    leaderboard_pipeline.run().unwrap();
+    sources_handle.join().await;
 }
