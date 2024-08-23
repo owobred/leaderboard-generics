@@ -313,3 +313,82 @@ impl<Msg, Meta, Metr> Leaderboard for LeaderboardSet<Msg, Meta, Metr> {
         }
     }
 }
+
+pub struct NullFilter<M> {
+    _phantom: std::marker::PhantomData<M>,
+}
+
+impl<M> Filter for NullFilter<M> {
+    type Message = M;
+
+    fn keep_message(&self, _: &Self::Message) -> bool {
+        true
+    }
+}
+
+impl<M> NullFilter<M> {
+    pub fn new() -> Self {
+        Self {
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+pub struct StaticFilterSet<H, N, M>
+where
+    H: Filter<Message = M>,
+    N: Filter<Message = M>,
+{
+    head: H,
+    next: N,
+    _msg_type: std::marker::PhantomData<M>,
+}
+
+impl<H, M> StaticFilterSet<H, NullFilter<M>, M>
+where
+    H: Filter<Message = M>,
+{
+    pub fn new(head: H) -> Self {
+        Self {
+            head,
+            next: NullFilter::new(),
+            _msg_type: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<H, M> StaticFilterSet<H, NullFilter<M>, M>
+where
+    H: Filter<Message = M>,
+{
+    pub fn append<N: Filter<Message = M>>(
+        self,
+        v: N,
+    ) -> StaticFilterSet<H, StaticFilterSet<N, NullFilter<M>, M>, M> {
+        StaticFilterSet {
+            head: self.head,
+            next: StaticFilterSet {
+                head: v,
+                next: NullFilter::new(),
+                _msg_type: std::marker::PhantomData,
+            },
+            _msg_type: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<H, N, M> Filter for StaticFilterSet<H, N, M>
+where
+    H: Filter<Message = M>,
+    N: Filter<Message = M>,
+{
+    type Message = M;
+
+    fn keep_message(&self, message: &Self::Message) -> bool {
+        if !self.head.keep_message(message) {
+            return false;
+        }
+
+        return self.next.keep_message(message);
+    }
+}
