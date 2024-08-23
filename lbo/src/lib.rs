@@ -174,46 +174,6 @@ pub struct MetricsAttached<Message, Metadata, Metrics> {
     pub metrics: Metrics,
 }
 
-pub struct MessageSourceSetBuilder<M> {
-    sources: Vec<Box<dyn MessageSource<Message = M>>>,
-}
-
-impl<M> MessageSourceSetBuilder<M> {
-    pub fn new() -> Self {
-        Self {
-            sources: Vec::new(),
-        }
-    }
-
-    pub fn add_source(mut self, source: impl MessageSource<Message = M> + 'static) -> Self {
-        self.sources
-            .push(Box::new(source) as Box<dyn MessageSource<Message = M>>);
-        self
-    }
-
-    pub fn build(self) -> MessageSourceSet<M> {
-        MessageSourceSet::new(self.sources)
-    }
-}
-
-pub struct MessageSourceSet<M> {
-    sources: Vec<Box<dyn MessageSource<Message = M>>>,
-}
-
-impl<M> MessageSourceSet<M> {
-    fn new(sources: Vec<Box<dyn MessageSource<Message = M>>>) -> Self {
-        Self { sources }
-    }
-}
-
-impl<M> MessageSource for MessageSourceSet<M> {
-    type Message = M;
-
-    fn next_message(&self) -> Option<Self::Message> {
-        todo!()
-    }
-}
-
 pub struct FilterChainBuilder<M> {
     filters: Vec<Box<dyn Filter<Message = M>>>,
 }
@@ -257,58 +217,6 @@ impl<M> Filter for FilterChain<M> {
 impl<M> FilterChain<M> {
     fn new(filters: Vec<Box<dyn Filter<Message = M>>>) -> Self {
         Self { filters }
-    }
-}
-
-pub struct LeaderboardSetBuilder<Msg, Meta, Metr> {
-    leaderboards: Vec<Box<dyn Leaderboard<Message = Msg, Metadata = Meta, Metrics = Metr>>>,
-}
-
-impl<Msg, Meta, Metr> LeaderboardSetBuilder<Msg, Meta, Metr> {
-    pub fn new() -> Self {
-        Self {
-            leaderboards: Vec::new(),
-        }
-    }
-
-    pub fn add_leaderboard(
-        mut self,
-        leaderboard: impl Leaderboard<Message = Msg, Metadata = Meta, Metrics = Metr> + 'static,
-    ) -> Self {
-        self.leaderboards.push(Box::new(leaderboard)
-            as Box<dyn Leaderboard<Message = Msg, Metadata = Meta, Metrics = Metr>>);
-        self
-    }
-
-    pub fn build(self) -> LeaderboardSet<Msg, Meta, Metr> {
-        LeaderboardSet::new(self.leaderboards)
-    }
-}
-
-pub struct LeaderboardSet<Msg, Meta, Metr> {
-    leaderboards: Vec<Box<dyn Leaderboard<Message = Msg, Metadata = Meta, Metrics = Metr>>>,
-}
-
-impl<Msg, Meta, Metr> LeaderboardSet<Msg, Meta, Metr> {
-    fn new(
-        leaderboards: Vec<Box<dyn Leaderboard<Message = Msg, Metadata = Meta, Metrics = Metr>>>,
-    ) -> Self {
-        Self { leaderboards }
-    }
-}
-
-impl<Msg, Meta, Metr> Leaderboard for LeaderboardSet<Msg, Meta, Metr> {
-    type Message = Msg;
-    type Metadata = Meta;
-    type Metrics = Metr;
-
-    fn update(
-        &mut self,
-        performance: &MetricsAttached<Self::Message, Self::Metadata, Self::Metrics>,
-    ) {
-        for leaderboard in &mut self.leaderboards {
-            leaderboard.update(performance);
-        }
     }
 }
 
@@ -384,5 +292,57 @@ where
         }
 
         return self.next.keep_message(message);
+    }
+}
+
+pub struct LeaderboardSetBuilder<Msg, Meta, Metr> {
+    leaderboards: Vec<Box<dyn Leaderboard<Message = Msg, Metadata = Meta, Metrics = Metr>>>,
+}
+
+impl<Msg, Meta, Metr> LeaderboardSetBuilder<Msg, Meta, Metr> {
+    pub fn new() -> Self {
+        Self {
+            leaderboards: Vec::new(),
+        }
+    }
+
+    pub fn add_leaderboard(
+        mut self,
+        leaderboard: impl Leaderboard<Message = Msg, Metadata = Meta, Metrics = Metr> + 'static,
+    ) -> Self {
+        self.leaderboards.push(Box::new(leaderboard)
+            as Box<dyn Leaderboard<Message = Msg, Metadata = Meta, Metrics = Metr>>);
+        self
+    }
+
+    pub fn build(self) -> LeaderboardSet<Msg, Meta, Metr> {
+        LeaderboardSet::new(self.leaderboards)
+    }
+}
+
+pub struct LeaderboardSet<Msg, Meta, Metr> {
+    leaderboards: Vec<Box<dyn Leaderboard<Message = Msg, Metadata = Meta, Metrics = Metr>>>,
+}
+
+impl<Msg, Meta, Metr> LeaderboardSet<Msg, Meta, Metr> {
+    fn new(
+        leaderboards: Vec<Box<dyn Leaderboard<Message = Msg, Metadata = Meta, Metrics = Metr>>>,
+    ) -> Self {
+        Self { leaderboards }
+    }
+}
+
+impl<Msg, Meta, Metr> Leaderboard for LeaderboardSet<Msg, Meta, Metr> {
+    type Message = Msg;
+    type Metadata = Meta;
+    type Metrics = Metr;
+
+    fn update(
+        &mut self,
+        performance: &MetricsAttached<Self::Message, Self::Metadata, Self::Metrics>,
+    ) {
+        for leaderboard in &mut self.leaderboards {
+            leaderboard.update(performance);
+        }
     }
 }

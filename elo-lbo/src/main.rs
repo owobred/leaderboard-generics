@@ -3,17 +3,15 @@ use elo_lbo::user_impl::{
     leaderboards::{BitsOnly, Overall},
     metadata::MetadataProcessor,
     metrics::MetricsProcessor,
-    sources::{DiscordMessageSource, TwitchMessageSource},
+    sources::TwitchMessageSource,
 };
-use lbo::{LeaderboardSetBuilder, MessageSourceSetBuilder, PipelineBuilder, StaticFilterSet};
+use lbo::{LeaderboardSetBuilder, PipelineBuilder, StaticFilterSet};
 
 fn main() {
     let leaderboard_pipeline = PipelineBuilder::new()
         .source(
-            MessageSourceSetBuilder::new()
-                .add_source(TwitchMessageSource::new())
-                .add_source(DiscordMessageSource::new())
-                .build(),
+            TwitchMessageSource::new(),
+            // TODO: add AsyncMpscSource here
         )
         .filter(
             // FilterChainBuilder::new()
