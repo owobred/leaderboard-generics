@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-lbo = { path = "../lbo/" }
 tokio = { version = "1.39.3", features = ["macros", "rt", "sync"] }
+lbo = { path = "../lbo/" }

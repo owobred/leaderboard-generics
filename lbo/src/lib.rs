@@ -265,7 +265,7 @@ where
             return false;
         }
 
-        return self.next.keep_message(message);
+        self.next.keep_message(message)
     }
 }
 
