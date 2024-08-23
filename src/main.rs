@@ -6,8 +6,7 @@ use lbo::{
         metrics::MetricsProcessor,
         sources::{DiscordMessageSource, TwitchMessageSource},
     },
-    FilterChainBuilder, LeaderboardSetBuilder, MessageSourceSetBuilder, PipelineBuilder,
-    StaticFilterSet,
+    LeaderboardSetBuilder, MessageSourceSetBuilder, PipelineBuilder, StaticFilterSet,
 };
 
 fn main() {
