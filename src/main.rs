@@ -7,6 +7,7 @@ use lbo::{
         sources::{DiscordMessageSource, TwitchMessageSource},
     },
     FilterChainBuilder, LeaderboardSetBuilder, MessageSourceSetBuilder, PipelineBuilder,
+    StaticFilterSet,
 };
 
 fn main() {
@@ -18,9 +19,11 @@ fn main() {
                 .build(),
         )
         .filter(
-            FilterChainBuilder::new()
-                .add_filter(OptoutFilter::new())
-                .build(),
+            // FilterChainBuilder::new()
+            // .add_filter(OptoutFilter::new())
+            // .build(),
+            StaticFilterSet::new(OptoutFilter::new()),
+            // then use `.append(...)` to add more to the static filter set
         )
         .metadata(MetadataProcessor::new())
         .metrics(MetricsProcessor::new())
