@@ -166,14 +166,14 @@ pub trait Leaderboard {
 }
 
 pub struct MetadataAttached<Message, Metadata> {
-    message: Message,
-    metadata: Metadata,
+    pub message: Message,
+    pub metadata: Metadata,
 }
 
 pub struct MetricsAttached<Message, Metadata, Metrics> {
-    message: Message,
-    metadata: Metadata,
-    metrics: Metrics,
+    pub message: Message,
+    pub metadata: Metadata,
+    pub metrics: Metrics,
 }
 
 pub struct MessageSourceSetBuilder<M> {
