@@ -27,10 +27,7 @@ where
 
     pub fn spawn_leaderboard(
         mut self,
-        leaderboard: impl Leaderboard<Message = Message, Metadata = Metadata>
-            + Send
-            + Sync
-            + 'static,
+        leaderboard: impl Leaderboard<Message = Message, Metadata = Metadata> + Send + Sync + 'static,
     ) -> Self {
         self.joinset.spawn(leaderboard_task(
             leaderboard,
@@ -85,10 +82,7 @@ where
     type Message = Message;
     type Metadata = Metadata;
 
-    fn update(
-        &mut self,
-        performance: &MetadataAttached<Self::Message, Self::Metadata>,
-    ) {
+    fn update(&mut self, performance: &MetadataAttached<Self::Message, Self::Metadata>) {
         self.performance_send
             .send(performance.to_owned())
             .ok()

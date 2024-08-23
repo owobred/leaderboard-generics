@@ -5,7 +5,7 @@ pub struct OptoutFilter;
 impl Filter for OptoutFilter {
     type Message = super::sources::SharedMessage;
 
-    fn keep_message(&self, message: &Self::Message) -> bool {
+    fn keep_message(&self, _: &Self::Message) -> bool {
         todo!()
     }
 }

@@ -16,10 +16,7 @@ impl MetadataAttacher for MetadataProcessor {
 
     type Metadata = Metadata;
 
-    fn attach_metadata(
-        &self,
-        message: Self::Message,
-    ) -> MetadataAttached<Self::Message, Self::Metadata> {
+    fn attach_metadata(&self, _: Self::Message) -> MetadataAttached<Self::Message, Self::Metadata> {
         todo!()
     }
 }
