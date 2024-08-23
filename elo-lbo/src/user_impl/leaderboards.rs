@@ -1,4 +1,4 @@
-use crate::Leaderboard;
+use lbo::{Leaderboard, MetricsAttached};
 
 #[derive(Clone)]
 pub struct BitsOnly {
@@ -18,7 +18,7 @@ impl Leaderboard for BitsOnly {
 
     fn update(
         &mut self,
-        performance: &crate::MetricsAttached<Self::Message, Self::Metadata, Self::Metrics>,
+        performance: &MetricsAttached<Self::Message, Self::Metadata, Self::Metrics>,
     ) {
         todo!()
     }
@@ -42,7 +42,7 @@ impl Leaderboard for Overall {
 
     fn update(
         &mut self,
-        performance: &crate::MetricsAttached<Self::Message, Self::Metadata, Self::Metrics>,
+        performance: &MetricsAttached<Self::Message, Self::Metadata, Self::Metrics>,
     ) {
         todo!()
     }

@@ -1,5 +1,3 @@
-pub mod user_impl;
-
 pub struct PipelineBuilder<S, F, MetaAttach, MetrAttach, L, Msg, Metadata, Metrics>
 where
     S: MessageSource<Message = Msg>,

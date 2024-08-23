@@ -1,4 +1,4 @@
-use crate::MetadataAttacher;
+use lbo::{MetadataAttached, MetadataAttacher};
 
 pub struct Metadata;
 
@@ -18,7 +18,7 @@ impl MetadataAttacher for MetadataProcessor {
     fn attach_metadata(
         &self,
         message: Self::Message,
-    ) -> crate::MetadataAttached<Self::Message, Self::Metadata> {
+    ) -> MetadataAttached<Self::Message, Self::Metadata> {
         todo!()
     }
 }

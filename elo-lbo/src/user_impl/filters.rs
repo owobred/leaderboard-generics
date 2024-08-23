@@ -1,4 +1,4 @@
-use crate::Filter;
+use lbo::Filter;
 
 pub struct OptoutFilter;
 

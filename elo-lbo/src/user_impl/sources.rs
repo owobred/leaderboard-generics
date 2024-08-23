@@ -1,4 +1,4 @@
-use crate::MessageSource;
+use lbo::MessageSource;
 
 pub struct TwitchMessageSource {}
 

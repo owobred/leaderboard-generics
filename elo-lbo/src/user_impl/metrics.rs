@@ -1,4 +1,4 @@
-use crate::MetricsAttacher;
+use lbo::{MetadataAttached, MetricsAttached, MetricsAttacher};
 
 pub struct Metrics;
 
@@ -17,8 +17,8 @@ impl MetricsAttacher for MetricsProcessor {
 
     fn attach_metrics(
         &self,
-        message: crate::MetadataAttached<Self::Message, Self::Metadata>,
-    ) -> crate::MetricsAttached<Self::Message, Self::Metadata, Self::Metrics> {
+        message: MetadataAttached<Self::Message, Self::Metadata>,
+    ) -> MetricsAttached<Self::Message, Self::Metadata, Self::Metrics> {
         todo!()
     }
 }
