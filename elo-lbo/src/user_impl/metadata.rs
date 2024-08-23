@@ -1,5 +1,6 @@
 use lbo::{MetadataAttached, MetadataAttacher};
 
+#[derive(Clone)]
 pub struct Metadata;
 
 pub struct MetadataProcessor;

@@ -32,6 +32,7 @@ impl DiscordMessageSource {
     }
 }
 
+#[derive(Clone)]
 pub enum SharedMessage {
     Twitch(()),
     Discord(()),

@@ -1,4 +1,5 @@
 use elo_lbo::{
+    leaderboardset::AsyncLeaderboardSetBuilder,
     sourceset::AsyncSourcesBuilder,
     user_impl::{
         filters::OptoutFilter,
@@ -8,13 +9,18 @@ use elo_lbo::{
         sources::{DiscordMessageSource, TwitchMessageSource},
     },
 };
-use lbo::{LeaderboardSetBuilder, PipelineBuilder, StaticFilterSet};
+use lbo::{PipelineBuilder, StaticFilterSet};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     let (sources, sources_handle) = AsyncSourcesBuilder::new()
         .spawn_source(TwitchMessageSource::new())
         .spawn_source(DiscordMessageSource::new())
+        .build();
+
+    let (leaderbord, leaderboards_handle) = AsyncLeaderboardSetBuilder::new()
+        .spawn_leaderboard(Overall::new())
+        .spawn_leaderboard(BitsOnly::new())
         .build();
 
     let leaderboard_pipeline = PipelineBuilder::new()
@@ -28,14 +34,10 @@ async fn main() {
         )
         .metadata(MetadataProcessor::new())
         .metrics(MetricsProcessor::new())
-        .leaderboard(
-            LeaderboardSetBuilder::new()
-                .add_leaderboard(Overall::new())
-                .add_leaderboard(BitsOnly::new())
-                .build(),
-        )
+        .leaderboard(leaderbord)
         .build();
 
     leaderboard_pipeline.run().unwrap();
     sources_handle.join().await;
+    leaderboards_handle.join().await;
 }

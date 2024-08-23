@@ -1,5 +1,6 @@
 use lbo::{MetadataAttached, MetricsAttached, MetricsAttacher};
 
+#[derive(Clone)]
 pub struct Metrics;
 
 pub struct MetricsProcessor;
