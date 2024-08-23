@@ -341,7 +341,6 @@ where
 {
     head: H,
     next: N,
-    _msg_type: std::marker::PhantomData<M>,
 }
 
 impl<H, M> StaticFilterSet<H, NullFilter<M>, M>
@@ -352,7 +351,6 @@ where
         Self {
             head,
             next: NullFilter::new(),
-            _msg_type: std::marker::PhantomData,
         }
     }
 }
@@ -370,9 +368,7 @@ where
             next: StaticFilterSet {
                 head: v,
                 next: NullFilter::new(),
-                _msg_type: std::marker::PhantomData,
             },
-            _msg_type: std::marker::PhantomData,
         }
     }
 }
