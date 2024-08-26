@@ -81,3 +81,21 @@ pub trait Exportable {
     fn get_state(&self) -> &Self::State;
     fn get_state_mut(&mut self) -> &mut Self::State;
 }
+
+pub struct SerdeExporter<E, S>
+where
+    E: Exportable<State = S>,
+    S: serde::Serialize,
+{
+    exportable: E,
+}
+
+impl<E, S> SerdeExporter<E, S>
+where
+    E: Exportable<State = S>,
+    S: serde::Serialize,
+{
+    pub fn export_json(&self) -> String {
+        serde_json::to_string(self.exportable.get_state()).unwrap()
+    }
+}

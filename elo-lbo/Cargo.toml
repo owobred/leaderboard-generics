@@ -6,3 +6,5 @@ edition = "2021"
 [dependencies]
 tokio = { version = "1.39.3", features = ["macros", "rt", "sync"] }
 lbo = { path = "../lbo/" }
+serde = "1.0.209"
+serde_json = "1.0.127"
