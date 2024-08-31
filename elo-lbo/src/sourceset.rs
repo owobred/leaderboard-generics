@@ -44,7 +44,7 @@ async fn source_task<S, M>(mut source: S, mpsc: tokio::sync::mpsc::Sender<M>)
 where
     S: MessageSource<Message = M>,
 {
-    while let Some(msg) = source.next_message() {
+    while let Some(msg) = source.next_message().await {
         mpsc.send(msg).await.unwrap();
     }
 }
@@ -53,11 +53,14 @@ pub struct AsyncSourcesRecv<M> {
     mpsc_recv: tokio::sync::mpsc::Receiver<M>,
 }
 
-impl<M> MessageSource for AsyncSourcesRecv<M> {
+impl<M> MessageSource for AsyncSourcesRecv<M>
+where
+    M: Send,
+{
     type Message = M;
 
-    fn next_message(&mut self) -> Option<Self::Message> {
-        self.mpsc_recv.blocking_recv()
+    async fn next_message(&mut self) -> Option<Self::Message> {
+        self.mpsc_recv.recv().await
     }
 }
 

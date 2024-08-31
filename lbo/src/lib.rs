@@ -1,3 +1,5 @@
+use std::future::Future;
+
 pub struct PipelineBuilder<S, F, PerfAttach, L, Msg, Performance>
 where
     S: MessageSource<Message = Msg>,
@@ -86,8 +88,9 @@ where
         }
     }
 
-    pub fn run(mut self) -> Result<(), ()> {
-        while let Some(msg) = self.source.next_message() {
+    // TODO: make the other functions in this loop async?
+    pub async fn run(mut self) -> Result<(), ()> {
+        while let Some(msg) = self.source.next_message().await {
             if !self.filter.keep_message(&msg) {
                 continue;
             }
@@ -104,7 +107,7 @@ where
 pub trait MessageSource {
     type Message;
 
-    fn next_message(&mut self) -> Option<Self::Message>;
+    fn next_message(&mut self) -> impl Future<Output = Option<Self::Message>> + Send + Sync;
 }
 
 pub trait Filter {

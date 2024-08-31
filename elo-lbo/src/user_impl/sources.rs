@@ -5,7 +5,7 @@ pub struct TwitchMessageSource {}
 impl MessageSource for TwitchMessageSource {
     type Message = SharedMessage;
 
-    fn next_message(&mut self) -> Option<Self::Message> {
+    async fn next_message(&mut self) -> Option<Self::Message> {
         todo!()
     }
 }
@@ -21,7 +21,7 @@ pub struct DiscordMessageSource {}
 impl MessageSource for DiscordMessageSource {
     type Message = SharedMessage;
 
-    fn next_message(&mut self) -> Option<Self::Message> {
+    async fn next_message(&mut self) -> Option<Self::Message> {
         todo!()
     }
 }

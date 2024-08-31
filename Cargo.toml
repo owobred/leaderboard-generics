@@ -1,3 +1,3 @@
 [workspace]
-members = ["lbo", "elo-lbo"]
+members = ["lbo", "elo-lbo", "live-elo"]
 resolver = "2"

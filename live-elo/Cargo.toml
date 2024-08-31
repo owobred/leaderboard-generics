@@ -1,0 +1,12 @@
+[package]
+name = "live-elo"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.40.0", features = ["full"] }
+twitch-irc = "5.0.1"
+lbo = { path = "../lbo" }
+elo-lbo = { path = "../elo-lbo" }
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }

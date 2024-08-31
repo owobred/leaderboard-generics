@@ -39,7 +39,7 @@ async fn main() {
         .leaderboard(leaderboards)
         .build();
 
-    leaderboard_pipeline.run().unwrap();
+    leaderboard_pipeline.run().await.unwrap();
     sources_handle.join().await;
     leaderboards_handle.join().await;
 }
