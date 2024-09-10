@@ -452,6 +452,7 @@ async fn serialize_changes(
 }
 
 #[derive(Debug, Serialize)]
+#[serde(tag = "type", content = "data", rename_all = "snake_case")]
 enum OutgoingMessage {
     InitialLeaderboards {
         leaderboards: HashMap<LeaderboardName, LeaderboardElos>,
