@@ -149,7 +149,20 @@ pub async fn turn_batched_performances_into_real_leaderboards(
                     *score = PerformancePoints::new(score.get() + delta.get());
                 }
 
-                let new_leaderboard = elo_calculators[leaderboard_name].run(current_performances);
+                // This is a bit roundabout but I couldn't figure out how to let tokio's spawn_blocking
+                // hold a reference to a local reference nicely
+                // The important thing here is moving `EloProcessor::run()` outside of the async function
+                // so it doesn't block for a (relatively) long time 
+                let (leaderboard_send, leaderboard_recv) = tokio::sync::oneshot::channel();
+                std::thread::scope(|s| {
+                    s.spawn(|| {
+                        let new_leaderboard =
+                            elo_calculators[leaderboard_name].run(current_performances);
+                        leaderboard_send.send(new_leaderboard).unwrap();
+                    });
+                });
+
+                let new_leaderboard = leaderboard_recv.await.unwrap();
                 *leaderboard = new_leaderboard;
             }
         }
@@ -333,13 +346,6 @@ struct WebState {
 }
 
 async fn handle_websocket(mut ws: WebSocket, state: WebState) {
-    // needs broadcast::Receiver<Arc<SerializedMessage>> for changes
-    // ^^ fed from another task that serializes mpsc::Receiver<LeaderboardsChanges>
-    // needs some kind of state to get current leaderboard for initial state
-    // ^^ turn_batched_performances_into_real_leaderboards needs to share its current leaderboards somewhere
-    //    ^^ Arc<RwLock<...>>?
-    // must also read messages from websocket to keep alive
-
     let initial_state_lock = state.current_leaderboards.read().await;
     // This needs to happen whilst we have the read guard, as otherwise there's a risk
     // that we get a batch that has already been applied.
@@ -371,6 +377,8 @@ async fn handle_websocket(mut ws: WebSocket, state: WebState) {
             WebsocketMessageSide::ToWebsocket(message) => {
                 // It sucks that axum requires binary websockets to send messages using
                 // `Vec<u8>`, so we have to clone out of the `Arc`
+                // It might be worth adding a semaphore before `message.to_vec()` to ensure we don't end up with
+                // hundreds of copies of the vec at the same time
                 ws.send(axum::extract::ws::Message::Binary(message.to_vec()))
                     .await
                     .unwrap();
@@ -427,38 +435,37 @@ enum WebsocketMessageSide {
 pub struct UnstartedWebsocketServer {
     ingest_send: mpsc::Sender<IngestedPerformance>,
     ingest_recv: mpsc::Receiver<IngestedPerformance>,
+    leaderboards: HashMap<LeaderboardName, LeaderboardElos>,
 }
 
 impl UnstartedWebsocketServer {
-    // TODO: this should probably have the leaderboards passed in here instead of
-    //       in `start` so that `get_exporter_for_leaderboard` can do some error
-    //       checking
-    pub fn new() -> Self {
+    pub fn new(leaderboards: HashMap<LeaderboardName, LeaderboardElos>) -> Self {
         let (ingest_send, ingest_recv) = mpsc::channel(10_000);
 
         Self {
             ingest_send,
             ingest_recv,
+            leaderboards,
         }
     }
 
-    // TODO: this should 100% have some kind of error checking to make sure
-    //       that its actually referencing a leaderboard that exists
     pub fn get_exporter_for_leaderboard(
         &self,
         leaderboard: LeaderboardName,
     ) -> ServerHandleExporter {
+        if !self.leaderboards.contains_key(&leaderboard) {
+            panic!("leaderboard {leaderboard:?} is not loaded");
+            // TODO: this function should probably return a result or something instead of panicing
+        }
+
         ServerHandleExporter {
             leaderboard,
             unbatched_send: self.ingest_send.clone(),
         }
     }
 
-    pub async fn start(
-        self,
-        leaderboards: HashMap<LeaderboardName, LeaderboardElos>,
-    ) -> WebServerHandle {
-        run_webserver(self.ingest_recv, leaderboards).await
+    pub async fn start(self) -> WebServerHandle {
+        run_webserver(self.ingest_recv, self.leaderboards).await
     }
 }
 

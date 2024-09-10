@@ -19,15 +19,10 @@ async fn main() {
             )
             .init();
     }
-    tracing::info!("erm");
-    // let (websocket_server_join, websocket_server) =
-    //     normal_leaderboards::exporter::websocket::UnloadedLeaderboards::builder()
-    //         .add_leaderboard(LeaderboardDescriptor::new("dummy", "./dummy.bin"))
-    //         .build()
-    //         .;
 
-    let websocket_server =
-        normal_leaderboards::exporter::websocket::UnstartedWebsocketServer::new();
+    let websocket_server = normal_leaderboards::exporter::websocket::UnstartedWebsocketServer::new(
+        std::collections::HashMap::from([(LeaderboardName::new("dummy"), Vec::new())]),
+    );
 
     let pipeline = Pipeline::builder()
         .source(DummyTwitchSource::new())
@@ -41,12 +36,7 @@ async fn main() {
         ))
         .build();
 
-    let webserver_handle = websocket_server
-        .start(std::collections::HashMap::from([(
-            LeaderboardName::new("dummy"),
-            Vec::new(),
-        )]))
-        .await;
+    let webserver_handle = websocket_server.start().await;
     tracing::debug!("sleeping");
     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
     tracing::debug!("sleep done");
