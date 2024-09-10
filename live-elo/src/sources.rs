@@ -1,4 +1,5 @@
 use lbo::{message::AuthoredMesasge, sources::Source};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub enum Message {
@@ -23,6 +24,7 @@ impl Source for DummyTwitchSource {
     async fn next_message(&self) -> Option<Self::Message> {
         let value = self.val.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if value < 10 {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             Some(Message::Twitch {
                 message: value.to_string(),
                 author_id: "123123123".to_string(),
@@ -33,9 +35,24 @@ impl Source for DummyTwitchSource {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct TwitchId(String);
+
+impl TwitchId {
+    pub fn new(id: String) -> Self {
+        Self(id)
+    }
+
+    pub fn get(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[serde(tag = "platform", content = "id", rename_all = "snake_case")]
 pub enum AuthorId {
-    Twitch(String),
+    Twitch(TwitchId),
 }
 
 impl AuthoredMesasge for Message {
@@ -43,7 +60,13 @@ impl AuthoredMesasge for Message {
 
     fn author_id(&self) -> Self::Id {
         match self {
-            Message::Twitch { author_id, .. } => AuthorId::Twitch(author_id.clone()),
+            Message::Twitch { author_id, .. } => AuthorId::Twitch(TwitchId::new(author_id.clone())),
         }
+    }
+}
+
+impl From<TwitchId> for AuthorId {
+    fn from(value: TwitchId) -> Self {
+        Self::Twitch(value)
     }
 }
