@@ -1,6 +1,6 @@
 use lbo::{performances::StandardLeaderboard, Pipeline};
 use normal_leaderboards::{
-    exporter::{DummyExporter, MultiExporter},
+    exporter::{websocket::LeaderboardName, DummyExporter, MultiExporter},
     filter::DummyFilter,
     scoring::DummyScoring,
     sources::DummyTwitchSource,
@@ -36,14 +36,14 @@ async fn main() {
             DummyScoring::new(),
             MultiExporter::pair(
                 DummyExporter::new(),
-                websocket_server.get_exporter_for_leaderboard("dummy".to_string()),
+                websocket_server.get_exporter_for_leaderboard(LeaderboardName::new("dummy")),
             ),
         ))
         .build();
 
     let webserver_handle = websocket_server
         .start(std::collections::HashMap::from([(
-            "dummy".to_string(),
+            LeaderboardName::new("dummy"),
             Vec::new(),
         )]))
         .await;

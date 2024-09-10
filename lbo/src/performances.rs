@@ -6,21 +6,22 @@ pub trait PerformanceProcessor {
     fn process_message(&mut self, message: Self::Message) -> impl std::future::Future<Output = ()>;
 }
 
-pub struct StandardLeaderboard<Scoring, Exporter, Message, Id>
+pub struct StandardLeaderboard<Scoring, Exporter, Message, Id, Performance>
 where
     Message: AuthoredMesasge<Id = Id>,
-    Scoring: ScoringSystem<Message = Message>,
-    Exporter: crate::exporter::Exporter<AuthorId = Id, Performance = f32>,
+    Scoring: ScoringSystem<Message = Message, Performance = Performance>,
+    Exporter: crate::exporter::Exporter<AuthorId = Id, Performance = Performance>,
 {
     scoring_system: Scoring,
     exporter: Exporter,
 }
 
-impl<Scoring, Exporter, Message, Id> StandardLeaderboard<Scoring, Exporter, Message, Id>
+impl<Scoring, Exporter, Message, Id, Performance>
+    StandardLeaderboard<Scoring, Exporter, Message, Id, Performance>
 where
     Message: AuthoredMesasge<Id = Id>,
-    Scoring: ScoringSystem<Message = Message>,
-    Exporter: crate::exporter::Exporter<AuthorId = Id, Performance = f32>,
+    Scoring: ScoringSystem<Message = Message, Performance = Performance>,
+    Exporter: crate::exporter::Exporter<AuthorId = Id, Performance = Performance>,
 {
     pub fn new(scoring_system: Scoring, exporter: Exporter) -> Self {
         Self {
@@ -30,12 +31,12 @@ where
     }
 }
 
-impl<Scoring, Exporter, Message, Id> PerformanceProcessor
-    for StandardLeaderboard<Scoring, Exporter, Message, Id>
+impl<Scoring, Exporter, Message, Id, Performance> PerformanceProcessor
+    for StandardLeaderboard<Scoring, Exporter, Message, Id, Performance>
 where
     Message: AuthoredMesasge<Id = Id>,
-    Scoring: ScoringSystem<Message = Message>,
-    Exporter: crate::exporter::Exporter<AuthorId = Id, Performance = f32>,
+    Scoring: ScoringSystem<Message = Message, Performance = Performance>,
+    Exporter: crate::exporter::Exporter<AuthorId = Id, Performance = Performance>,
 {
     type Message = Message;
 

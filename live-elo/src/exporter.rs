@@ -1,6 +1,7 @@
 pub mod websocket;
 
 use lbo::exporter::Exporter;
+use websocket::PerformancePoints;
 
 pub struct DummyExporter {}
 
@@ -11,7 +12,7 @@ impl DummyExporter {
 }
 
 impl Exporter for DummyExporter {
-    type Performance = f32;
+    type Performance = PerformancePoints;
     type AuthorId = super::sources::AuthorId;
 
     async fn export(&mut self, author_id: Self::AuthorId, performance: Self::Performance) {

@@ -14,18 +14,77 @@ use tracing::{debug, info, instrument, trace};
 
 use crate::sources::AuthorId;
 
-// TODO: makes these into newtypes bruhge
-pub type LeaderboardName = String;
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[serde(transparent)]
+pub struct LeaderboardName(&'static str);
 
-pub type PerformancePoints = f32;
-pub type Elo = f32;
+impl LeaderboardName {
+    pub fn new(name: &'static str) -> Self {
+        Self(name)
+    }
+
+    pub fn get(&self) -> &'static str {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(transparent)]
+pub struct PerformancePoints(f32);
+
+impl PerformancePoints {
+    pub fn new(value: f32) -> Self {
+        Self(value)
+    }
+
+    pub fn get(&self) -> f32 {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(transparent)]
+pub struct Elo(f32);
+
+impl Elo {
+    pub fn new(value: f32) -> Self {
+        Self(value)
+    }
+
+    pub fn get(&self) -> f32 {
+        self.0
+    }
+}
 
 pub type LeaderboardPerformances = HashMap<AuthorId, PerformancePoints>;
-pub type LeaderboardElos = Vec<(AuthorId, Elo)>;
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct LeaderboardEloEntry {
+    author_id: AuthorId,
+    elo: Elo,
+}
+
+pub type LeaderboardElos = Vec<LeaderboardEloEntry>;
 
 type LeaderboardPosition = usize;
-type LeaderboardElosChanges = HashMap<LeaderboardPosition, (AuthorId, Elo)>;
-type LeaderboardsChanges = HashMap<LeaderboardName, LeaderboardElosChanges>;
+type LeaderboardElosChanges = HashMap<LeaderboardPosition, LeaderboardEloEntry>;
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(transparent)]
+struct LeaderboardsChanges(HashMap<LeaderboardName, LeaderboardElosChanges>);
+
+impl LeaderboardsChanges {
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    pub fn get(&self) -> &HashMap<LeaderboardName, LeaderboardElosChanges> {
+        &self.0
+    }
+
+    pub fn get_mut(&mut self) -> &mut HashMap<LeaderboardName, LeaderboardElosChanges> {
+        &mut self.0
+    }
+}
 
 pub struct DummyEloProcessor {
     starting_leaderboard: LeaderboardElos,
@@ -44,7 +103,10 @@ impl DummyEloProcessor {
         performances
             .to_owned()
             .into_iter()
-            .map(|(key, value)| (key, value))
+            .map(|(author_id, pp)| LeaderboardEloEntry {
+                author_id,
+                elo: Elo::new(pp.get()),
+            })
             .collect()
     }
 }
@@ -72,40 +134,41 @@ pub async fn turn_batched_performances_into_real_leaderboards(
     drop(base_leaderboards);
 
     while let Some(mut batch) = incoming.recv().await {
-        trace!("trying to get write lock");
+        trace!("got new batch");
         let mut current_leaderboards = leaderboards.write().await;
-        trace!(?batch, ?current_leaderboards, "got new batch");
         let before = current_leaderboards.clone();
 
         for (leaderboard_name, leaderboard) in current_leaderboards.iter_mut() {
             if let Some(changes) = batch.remove(leaderboard_name) {
-                info!(?leaderboard_name, "ayayaya");
                 let current_performances =
                     all_current_performances.get_mut(leaderboard_name).unwrap();
                 for (author, delta) in changes {
-                    // let score = current_performances.get_mut(&author).unwrap();
-                    // *score += delta;
-                    let score = current_performances.entry(author).or_default();
-                    *score += delta;
+                    let score = current_performances
+                        .entry(author)
+                        .or_insert(PerformancePoints::new(0.0));
+                    *score = PerformancePoints::new(score.get() + delta.get());
                 }
-                trace!(?current_performances, "erm");
 
                 let new_leaderboard = elo_calculators[leaderboard_name].run(current_performances);
-                info!(?leaderboard_name, ?new_leaderboard, "updated leaderboard");
                 *leaderboard = new_leaderboard;
             }
         }
 
-        // info!(?current_performances, "updated performances for all leaderboards");
-        info!(?before, ?current_leaderboards, "finding changes");
+        trace!("finding changes");
         let delta = find_changes(&before, &current_leaderboards);
-        info!(?delta, "changes were");
+        trace!("found changes");
         outgoing.send(delta).await.unwrap();
     }
 }
 
 type LeaderboardPerformancesDelta = HashMap<AuthorId, PerformancePoints>;
-type IngestedPerformance = (LeaderboardName, AuthorId, PerformancePoints);
+#[derive(Debug, Clone)]
+struct IngestedPerformance {
+    pub leaderboard_name: LeaderboardName,
+    pub author_id: AuthorId,
+    pub performance: PerformancePoints,
+}
+
 type FullBatchedPerformances = HashMap<LeaderboardName, LeaderboardPerformancesDelta>;
 
 #[instrument(level = "trace", skip_all)]
@@ -146,13 +209,20 @@ pub async fn batch_performance_updates(
     debug!("batch_performance_updates loop exited")
 }
 
-fn squash_batch(read: Vec<(String, AuthorId, f32)>) -> FullBatchedPerformances {
+fn squash_batch(read: Vec<IngestedPerformance>) -> FullBatchedPerformances {
     let mut batch = FullBatchedPerformances::new();
 
-    for (leaderboard, author, score) in read {
-        let leaderboard = batch.entry(leaderboard).or_default();
-        let author_score = leaderboard.entry(author).or_default();
-        *author_score += score;
+    for IngestedPerformance {
+        leaderboard_name,
+        author_id,
+        performance,
+    } in read
+    {
+        let leaderboard = batch.entry(leaderboard_name).or_default();
+        let author_score = leaderboard
+            .entry(author_id)
+            .or_insert(PerformancePoints::new(0.0));
+        *author_score = PerformancePoints::new(author_score.get() + performance.get());
     }
 
     batch
@@ -164,13 +234,13 @@ async fn read_as_many_as_possible<T>(mpsc: &mut mpsc::Receiver<T>, into: &mut Ve
     }
 }
 
-pub fn find_changes(
+fn find_changes(
     from: &HashMap<LeaderboardName, LeaderboardElos>,
     to: &HashMap<LeaderboardName, LeaderboardElos>,
 ) -> LeaderboardsChanges {
     let mut changes = LeaderboardsChanges::new();
     for (name, before) in from {
-        let leaderboard_changes = changes.entry(name.to_owned()).or_default();
+        let leaderboard_changes = changes.get_mut().entry(name.to_owned()).or_default();
         let now = to.get(name).unwrap();
 
         for (index, now_at) in now.into_iter().enumerate() {
@@ -204,7 +274,7 @@ impl WebServerHandle {
     }
 }
 
-pub async fn run_webserver(
+async fn run_webserver(
     ingest_recv: mpsc::Receiver<IngestedPerformance>,
     leaderboards: HashMap<LeaderboardName, LeaderboardElos>,
 ) -> WebServerHandle {
@@ -340,7 +410,7 @@ async fn serialize_changes(
 }
 
 #[derive(Debug, Serialize)]
-pub enum OutgoingMessage {
+enum OutgoingMessage {
     InitialLeaderboards {
         leaderboards: HashMap<LeaderboardName, LeaderboardElos>,
     },
@@ -403,7 +473,11 @@ impl Exporter for ServerHandleExporter {
 
     async fn export(&mut self, author_id: Self::AuthorId, performance: Self::Performance) {
         self.unbatched_send
-            .send((self.leaderboard.clone(), author_id, performance))
+            .send(IngestedPerformance {
+                leaderboard_name: self.leaderboard.clone(),
+                author_id,
+                performance,
+            })
             .await
             .unwrap();
     }

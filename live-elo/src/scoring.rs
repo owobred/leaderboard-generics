@@ -10,10 +10,13 @@ impl DummyScoring {
 
 impl ScoringSystem for DummyScoring {
     type Message = super::sources::Message;
+    type Performance = super::exporter::websocket::PerformancePoints;
 
-    fn score_message(&self, message: Self::Message) -> f32 {
+    fn score_message(&self, message: Self::Message) -> Self::Performance {
         match message {
-            crate::sources::Message::Twitch { message, .. } => message.parse().unwrap(),
+            crate::sources::Message::Twitch { message, .. } => {
+                super::exporter::websocket::PerformancePoints::new(message.parse().unwrap())
+            }
         }
     }
 }
