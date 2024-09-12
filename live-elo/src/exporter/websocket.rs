@@ -10,7 +10,7 @@ use lbo::exporter::Exporter;
 use serde::Serialize;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tower_http::trace::TraceLayer;
-use tracing::{debug, error, info, instrument, trace};
+use tracing::{debug, info, instrument, trace};
 use websocket_shared::{
     AuthorId, Elo, LeaderboardEloChanges, LeaderboardEloEntry, LeaderboardElos, LeaderboardName,
     LeaderboardPosistion, LeaderboardsChanges, OutgoingMessage,
