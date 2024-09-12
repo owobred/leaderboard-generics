@@ -14,6 +14,8 @@ use tracing::{debug, error, info, instrument, trace};
 
 use crate::sources::AuthorId;
 
+use super::elo_calculator::EloProcessor;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(transparent)]
 pub struct LeaderboardName(&'static str);
@@ -110,45 +112,19 @@ impl LeaderboardsChanges {
     }
 }
 
-pub struct DummyEloProcessor {
-    starting_leaderboard: LeaderboardStates,
-}
-
-impl DummyEloProcessor {
-    pub fn new(starting_leaderboard: LeaderboardStates) -> Self {
-        Self {
-            starting_leaderboard,
-        }
-    }
-
-    pub fn run(&self, performances: &LeaderboardPerformances) -> LeaderboardStates {
-        // TODO: use a real elo processor please for the love of god
-        // LeaderboardElos::new()
-        performances
-            .to_owned()
-            .into_iter()
-            .map(|(author_id, pp)| LeaderboardStateEntry {
-                author_id,
-                elo: Elo::new(pp.get()),
-                performance_points: pp,
-            })
-            .collect()
-    }
-}
-
 #[instrument(level = "trace", skip_all)]
 pub async fn turn_batched_performances_into_real_leaderboards(
     mut incoming: mpsc::Receiver<FullBatchedPerformances>,
     // base_leaderboards: HashMap<LeaderboardName, LeaderboardElos>,
-    leaderboards: Arc<RwLock<HashMap<LeaderboardName, LeaderboardStates>>>,
+    leaderboards: Arc<RwLock<HashMap<LeaderboardName, LeaderboardElos>>>,
     outgoing: mpsc::Sender<LeaderboardsChanges>,
 ) {
     let base_leaderboards = leaderboards.read().await;
-    let elo_calculators: HashMap<LeaderboardName, DummyEloProcessor> = HashMap::from_iter(
+    let elo_calculators: HashMap<LeaderboardName, EloProcessor> = HashMap::from_iter(
         base_leaderboards
             .clone()
             .into_iter()
-            .map(|(key, value)| (key, DummyEloProcessor::new(value))),
+            .map(|(key, value)| (key, EloProcessor::new(value))),
     );
     let mut all_current_performances: HashMap<LeaderboardName, LeaderboardPerformances> =
         HashMap::from_iter(
@@ -273,8 +249,8 @@ async fn read_as_many_as_possible<T>(mpsc: &mut mpsc::Receiver<T>, into: &mut Ve
 }
 
 fn find_changes(
-    from: &HashMap<LeaderboardName, LeaderboardStates>,
-    to: &HashMap<LeaderboardName, LeaderboardStates>,
+    from: &HashMap<LeaderboardName, LeaderboardElos>,
+    to: &HashMap<LeaderboardName, LeaderboardElos>,
 ) -> LeaderboardsChanges {
     let mut changes = LeaderboardsChanges::new();
     for (name, before) in from {
@@ -284,7 +260,7 @@ fn find_changes(
         for (index, now_at) in now.into_iter().enumerate() {
             if before
                 .get(index)
-                .map(|b| b.author_id != now_at.author_id || b.elo != now_at.elo)
+                .map(|b| b != now_at)
                 .unwrap_or(true)
             {
                 leaderboard_changes.insert(index, now_at.to_owned().into());
@@ -318,7 +294,7 @@ impl WebServerHandle {
 
 async fn run_webserver(
     ingest_recv: mpsc::Receiver<IngestedPerformance>,
-    leaderboards_states: HashMap<LeaderboardName, LeaderboardStates>,
+    leaderboards_states: HashMap<LeaderboardName, LeaderboardElos>,
 ) -> WebServerHandle {
     let (serialized_send, serialized_recv) = broadcast::channel(10);
     let current_leaderboards_states = Arc::new(RwLock::new(leaderboards_states));
@@ -371,7 +347,7 @@ async fn get_websocket(ws: WebSocketUpgrade, State(state): State<WebState>) -> i
 #[derive(Clone)]
 struct WebState {
     serialized_send: broadcast::Sender<Arc<SerializedOutgoingMessage>>,
-    current_leaderboards_states: Arc<RwLock<HashMap<LeaderboardName, LeaderboardStates>>>,
+    current_leaderboards_states: Arc<RwLock<HashMap<LeaderboardName, LeaderboardElos>>>,
 }
 
 async fn handle_websocket(mut ws: WebSocket, state: WebState) {
@@ -470,11 +446,11 @@ enum WebsocketMessageSide {
 pub struct UnstartedWebsocketServer {
     ingest_send: mpsc::Sender<IngestedPerformance>,
     ingest_recv: mpsc::Receiver<IngestedPerformance>,
-    leaderboards: HashMap<LeaderboardName, LeaderboardStates>,
+    leaderboards: HashMap<LeaderboardName, LeaderboardElos>,
 }
 
 impl UnstartedWebsocketServer {
-    pub fn new(leaderboards: HashMap<LeaderboardName, LeaderboardStates>) -> Self {
+    pub fn new(leaderboards: HashMap<LeaderboardName, LeaderboardElos>) -> Self {
         let (ingest_send, ingest_recv) = mpsc::channel(10_000);
 
         Self {

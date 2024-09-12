@@ -1,4 +1,5 @@
 pub mod websocket;
+pub mod elo_calculator;
 
 use lbo::exporter::Exporter;
 use websocket::PerformancePoints;
