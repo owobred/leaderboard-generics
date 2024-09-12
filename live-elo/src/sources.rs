@@ -23,15 +23,15 @@ impl Source for DummyTwitchSource {
 
     async fn next_message(&self) -> Option<Self::Message> {
         let value = self.val.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        if value < 10 {
+        // if value < 10 {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             Some(Message::Twitch {
                 message: value.to_string(),
                 author_id: "123123123".to_string(),
             })
-        } else {
-            None
-        }
+        // } else {
+            // None
+        // }
     }
 }
 

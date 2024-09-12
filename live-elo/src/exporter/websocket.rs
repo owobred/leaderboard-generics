@@ -258,11 +258,7 @@ fn find_changes(
         let now = to.get(name).unwrap();
 
         for (index, now_at) in now.into_iter().enumerate() {
-            if before
-                .get(index)
-                .map(|b| b != now_at)
-                .unwrap_or(true)
-            {
+            if before.get(index).map(|b| b != now_at).unwrap_or(true) {
                 leaderboard_changes.insert(index, now_at.to_owned().into());
             }
         }
@@ -391,7 +387,7 @@ async fn handle_websocket(mut ws: WebSocket, state: WebState) {
                 // hundreds of copies of the vec at the same time
                 ws.send(axum::extract::ws::Message::Binary(message.to_vec()))
                     .await
-                    .unwrap();
+                    .ok();
             }
             WebsocketMessageSide::FromWebsocket(message) => {
                 match message {
@@ -412,7 +408,7 @@ async fn handle_websocket(mut ws: WebSocket, state: WebState) {
         }
     }
 
-    ws.close().await.unwrap();
+    ws.close().await.ok();
 }
 
 type SerializedOutgoingMessage = Vec<u8>;
