@@ -1,10 +1,8 @@
 use std::collections::HashSet;
 
-use crate::sources::AuthorId;
+use websocket_shared::{AuthorId, Elo, LeaderboardEloEntry, LeaderboardElos};
 
-use super::websocket::{
-    Elo, LeaderboardEloEntry, LeaderboardElos, LeaderboardPerformances, PerformancePoints,
-};
+use super::websocket::{LeaderboardPerformances, PerformancePoints};
 
 const STARTING_ELO: f32 = 1200.0;
 
@@ -29,9 +27,7 @@ impl EloProcessor {
     }
 
     pub fn run(&self, performances: &LeaderboardPerformances) -> LeaderboardElos {
-        let mut players = self
-            .base_leaderboard
-            .clone()
+        let mut players = <Vec<LeaderboardEloEntry> as Clone>::clone(&self.base_leaderboard)
             .into_iter()
             .map(|LeaderboardEloEntry { author_id, elo }| WorkingEntry {
                 author_id,
@@ -65,7 +61,7 @@ impl EloProcessor {
         // Instead, I'm going to try the thing I was talking about :Clueless:
         // https://github.com/vanorsigma/neuro-chat-elo/pull/27#issuecomment-2322841347
 
-        let mut results = LeaderboardElos::new();
+        let mut results = Vec::new();
 
         // This could probably have a rayon par_iter thrown at it if needed
         for player in players.iter() {
@@ -121,6 +117,6 @@ impl EloProcessor {
 
         results.sort_by(|l, r| l.elo.get().total_cmp(&r.elo.get()).reverse());
 
-        results
+        LeaderboardElos::new(results)
     }
 }

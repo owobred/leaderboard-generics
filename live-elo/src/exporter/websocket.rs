@@ -11,28 +11,19 @@ use serde::Serialize;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tower_http::trace::TraceLayer;
 use tracing::{debug, error, info, instrument, trace};
-
-use crate::sources::AuthorId;
+use websocket_shared::{
+    AuthorId, Elo, LeaderboardEloChanges, LeaderboardEloEntry, LeaderboardElos, LeaderboardName,
+    LeaderboardPosistion, LeaderboardsChanges, OutgoingMessage,
+};
 
 use super::elo_calculator::EloProcessor;
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
-#[serde(transparent)]
-pub struct LeaderboardName(&'static str);
-
-impl LeaderboardName {
-    pub fn new(name: &'static str) -> Self {
-        Self(name)
-    }
-
-    pub fn get(&self) -> &'static str {
-        self.0
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct PerformancePoints(f32);
+
+// TODO: make this into a newtype smhsmh
+pub type LeaderboardPerformances = HashMap<AuthorId, PerformancePoints>;
 
 impl PerformancePoints {
     pub fn new(value: f32) -> Self {
@@ -44,33 +35,6 @@ impl PerformancePoints {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(transparent)]
-pub struct Elo(f32);
-
-impl Elo {
-    pub fn new(value: f32) -> Self {
-        if !value.is_finite() {
-            error!(?value, "elo value was not finite");
-            panic!("elo value was not finite: {value:?}");
-        }
-        Self(value)
-    }
-
-    pub fn get(&self) -> f32 {
-        self.0
-    }
-}
-
-// TODO: make this into a newtype smhsmh
-pub type LeaderboardPerformances = HashMap<AuthorId, PerformancePoints>;
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct LeaderboardEloEntry {
-    pub author_id: AuthorId,
-    pub elo: Elo,
-}
-
 impl From<LeaderboardStateEntry> for LeaderboardEloEntry {
     fn from(value: LeaderboardStateEntry) -> Self {
         Self {
@@ -80,8 +44,6 @@ impl From<LeaderboardStateEntry> for LeaderboardEloEntry {
     }
 }
 
-pub type LeaderboardElos = Vec<LeaderboardEloEntry>;
-
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct LeaderboardStateEntry {
     pub author_id: AuthorId,
@@ -90,27 +52,6 @@ pub struct LeaderboardStateEntry {
 }
 
 pub type LeaderboardStates = Vec<LeaderboardStateEntry>;
-
-type LeaderboardPosition = usize;
-type LeaderboardElosChanges = HashMap<LeaderboardPosition, LeaderboardEloEntry>;
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(transparent)]
-struct LeaderboardsChanges(HashMap<LeaderboardName, LeaderboardElosChanges>);
-
-impl LeaderboardsChanges {
-    pub fn new() -> Self {
-        Self(HashMap::new())
-    }
-
-    pub fn get(&self) -> &HashMap<LeaderboardName, LeaderboardElosChanges> {
-        &self.0
-    }
-
-    pub fn get_mut(&mut self) -> &mut HashMap<LeaderboardName, LeaderboardElosChanges> {
-        &mut self.0
-    }
-}
 
 #[instrument(level = "trace", skip_all)]
 pub async fn turn_batched_performances_into_real_leaderboards(
@@ -254,12 +195,16 @@ fn find_changes(
 ) -> LeaderboardsChanges {
     let mut changes = LeaderboardsChanges::new();
     for (name, before) in from {
-        let leaderboard_changes = changes.get_mut().entry(name.to_owned()).or_default();
+        let leaderboard_changes = changes
+            .get_mut()
+            .entry(name.to_owned())
+            .or_insert_with(|| LeaderboardEloChanges::new());
         let now = to.get(name).unwrap();
 
-        for (index, now_at) in now.into_iter().enumerate() {
+        for (index, now_at) in now.iter().enumerate() {
             if before.get(index).map(|b| b != now_at).unwrap_or(true) {
-                leaderboard_changes.insert(index, now_at.to_owned().into());
+                leaderboard_changes
+                    .insert(LeaderboardPosistion::new(index), now_at.to_owned().into());
             }
         }
     }
@@ -357,10 +302,7 @@ async fn handle_websocket(mut ws: WebSocket, state: WebState) {
     // TODO: this should probably be stored somewhere to mitigate the effect on CPU usage if
     //       many clients connect at once
     let initial_state_serialized = serde_json::to_vec(&OutgoingMessage::InitialLeaderboards {
-        leaderboards: initial_state
-            .into_iter()
-            .map(|(key, value)| (key, value.into_iter().map(|entry| entry.into()).collect()))
-            .collect(),
+        leaderboards: initial_state,
     })
     .unwrap();
     ws.send(axum::extract::ws::Message::Binary(initial_state_serialized))
@@ -421,17 +363,6 @@ async fn serialize_changes(
         let serialized = serde_json::to_vec(&OutgoingMessage::Changes { changes }).unwrap();
         outgoing.send(Arc::new(serialized)).unwrap();
     }
-}
-
-#[derive(Debug, Serialize)]
-#[serde(tag = "type", content = "data", rename_all = "snake_case")]
-enum OutgoingMessage {
-    InitialLeaderboards {
-        leaderboards: HashMap<LeaderboardName, LeaderboardElos>,
-    },
-    Changes {
-        changes: LeaderboardsChanges,
-    },
 }
 
 enum WebsocketMessageSide {

@@ -2,6 +2,7 @@ use lbo::{message::AuthoredMesasge, sources::Source};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tracing::trace;
+use websocket_shared::{AuthorId, TwitchId};
 
 #[derive(Debug)]
 pub struct TwitchMessage {
@@ -82,26 +83,6 @@ async fn twitch_source_inner(mpsc_send: mpsc::Sender<TwitchMessage>) {
     jh.await.unwrap()
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct TwitchId(String);
-
-impl TwitchId {
-    pub fn new(id: String) -> Self {
-        Self(id)
-    }
-
-    pub fn get(&self) -> &str {
-        &self.0
-    }
-}
-
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Serialize, Deserialize)]
-#[serde(tag = "platform", content = "id", rename_all = "snake_case")]
-pub enum AuthorId {
-    Twitch(TwitchId),
-}
-
 impl AuthoredMesasge for Message {
     type Id = AuthorId;
 
@@ -109,11 +90,5 @@ impl AuthoredMesasge for Message {
         match self {
             Message::Twitch(message) => AuthorId::Twitch(TwitchId::new(message.author_id.clone())),
         }
-    }
-}
-
-impl From<TwitchId> for AuthorId {
-    fn from(value: TwitchId) -> Self {
-        Self::Twitch(value)
     }
 }

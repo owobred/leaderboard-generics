@@ -3,6 +3,7 @@ pub mod elo_calculator;
 
 use lbo::exporter::Exporter;
 use websocket::PerformancePoints;
+use websocket_shared::AuthorId;
 
 pub struct DummyExporter {}
 
@@ -14,7 +15,7 @@ impl DummyExporter {
 
 impl Exporter for DummyExporter {
     type Performance = PerformancePoints;
-    type AuthorId = super::sources::AuthorId;
+    type AuthorId = AuthorId;
 
     async fn export(&mut self, author_id: Self::AuthorId, performance: Self::Performance) {
         println!("got performance for {author_id:?}: {performance:?}");
