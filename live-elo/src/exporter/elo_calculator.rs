@@ -119,6 +119,8 @@ impl EloProcessor {
             })
         }
 
+        results.sort_by(|l, r| l.elo.get().total_cmp(&r.elo.get()).reverse());
+
         results
     }
 }

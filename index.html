@@ -73,7 +73,6 @@
                     break;
 
                 case "changes":
-                    console.log("got changes", message.data.changes[displayedLeaderboard]);
                     processUpdate(message.data.changes[displayedLeaderboard]);
                     break;
 
@@ -124,8 +123,6 @@
             entries.sort(([a, _a], [b, _b]) => a - b);
 
             for (const [index, value] of entries) {
-                console.log("update", index, value);
-
                 const tableBodyLength = tableBody.rows.length;
                 if (index === tableBodyLength) {
                     appendRow(table, `${value.author_id.platform}:${value.author_id.id}`, value.elo);

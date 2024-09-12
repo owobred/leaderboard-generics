@@ -2,8 +2,8 @@ use lbo::{performances::StandardLeaderboard, Pipeline};
 use normal_leaderboards::{
     exporter::{websocket::LeaderboardName, DummyExporter, MultiExporter},
     filter::DummyFilter,
-    scoring::DummyScoring,
-    sources::DummyTwitchSource,
+    scoring::MessageCountScoring,
+    sources::TwitchMessageSourceHandle,
 };
 
 #[tokio::main]
@@ -25,10 +25,10 @@ async fn main() {
     );
 
     let pipeline = Pipeline::builder()
-        .source(DummyTwitchSource::new())
+        .source(TwitchMessageSourceHandle::spawn())
         .filter(DummyFilter::new())
         .performances(StandardLeaderboard::new(
-            DummyScoring::new(),
+            MessageCountScoring::new(),
             MultiExporter::pair(
                 DummyExporter::new(),
                 websocket_server.get_exporter_for_leaderboard(LeaderboardName::new("dummy")),
@@ -37,13 +37,13 @@ async fn main() {
         .build();
 
     let webserver_handle = websocket_server.start().await;
-    tracing::debug!("sleeping");
-    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-    tracing::debug!("sleep done");
+    // tracing::debug!("sleeping");
+    // tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    // tracing::debug!("sleep done");
     pipeline.run().await.unwrap();
     tracing::debug!("pipeline finished");
-    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    // tokio::time::sleep(std::time::Duration::from_secs(10)).await;
     webserver_handle.close().await;
     tracing::debug!("webserver handle finished");
-    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    // tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 }

@@ -1,38 +1,82 @@
 use lbo::{message::AuthoredMesasge, sources::Source};
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
+use tracing::trace;
+
+#[derive(Debug)]
+pub struct TwitchMessage {
+    message: String,
+    author_id: String,
+}
 
 #[derive(Debug)]
 pub enum Message {
-    Twitch { message: String, author_id: String },
+    Twitch(TwitchMessage),
 }
 
-pub struct DummyTwitchSource {
-    val: std::sync::atomic::AtomicUsize,
+pub struct TwitchMessageSourceHandle {
+    mpsc_recv: mpsc::Receiver<TwitchMessage>,
+    task_join: tokio::task::JoinHandle<()>,
 }
 
-impl DummyTwitchSource {
-    pub fn new() -> Self {
+impl TwitchMessageSourceHandle {
+    pub fn spawn() -> Self {
+        let (mpsc_send, mpsc_recv) = mpsc::channel(1000);
+        let task_join = tokio::task::spawn(twitch_source_inner(mpsc_send));
+
         Self {
-            val: std::sync::atomic::AtomicUsize::new(0),
+            mpsc_recv,
+            task_join,
         }
     }
+
+    // TODO: There should probably be some kind of way to clean this up in the pipeline...
+    //       might be worth providing something like `Pipeline::cleanup(self)` which then calls async cleanup
+    //       on sub components
+    pub async fn cancel(self) {
+        drop(self.mpsc_recv);
+        self.task_join.abort();
+    }
 }
 
-impl Source for DummyTwitchSource {
+impl Source for TwitchMessageSourceHandle {
     type Message = Message;
 
-    async fn next_message(&self) -> Option<Self::Message> {
-        let value = self.val.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        // if value < 10 {
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            Some(Message::Twitch {
-                message: value.to_string(),
-                author_id: "123123123".to_string(),
-            })
-        // } else {
-            // None
-        // }
+    async fn next_message(&mut self) -> Option<Self::Message> {
+        self.mpsc_recv
+            .recv()
+            .await
+            .map(|message| Message::Twitch(message))
     }
+}
+
+async fn twitch_source_inner(mpsc_send: mpsc::Sender<TwitchMessage>) {
+    let config = twitch_irc::ClientConfig::default();
+    let (mut incoming_message, client) =
+        twitch_irc::TwitchIRCClient::<twitch_irc::SecureTCPTransport, _>::new(config);
+
+    let jh = tokio::task::spawn(async move {
+        while let Some(message) = incoming_message.recv().await {
+            match message {
+                twitch_irc::message::ServerMessage::Privmsg(message) => {
+                    trace!(?message, "got irc message");
+                    mpsc_send
+                        .send(TwitchMessage {
+                            message: message.message_text,
+                            author_id: message.sender.id,
+                        })
+                        .await
+                        .unwrap();
+                }
+                _ => (),
+            }
+        }
+    });
+
+    // FIXME: this should be behind some kinda of config I beg of you
+    client.join("ironmouse".to_string()).unwrap();
+
+    jh.await.unwrap()
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Serialize, Deserialize)]
@@ -60,7 +104,7 @@ impl AuthoredMesasge for Message {
 
     fn author_id(&self) -> Self::Id {
         match self {
-            Message::Twitch { author_id, .. } => AuthorId::Twitch(TwitchId::new(author_id.clone())),
+            Message::Twitch(message) => AuthorId::Twitch(TwitchId::new(message.author_id.clone())),
         }
     }
 }

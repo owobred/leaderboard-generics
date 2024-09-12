@@ -1,21 +1,21 @@
 use lbo::scoring::ScoringSystem;
 
-pub struct DummyScoring {}
+pub struct MessageCountScoring {}
 
-impl DummyScoring {
+impl MessageCountScoring {
     pub fn new() -> Self {
         Self {}
     }
 }
 
-impl ScoringSystem for DummyScoring {
+impl ScoringSystem for MessageCountScoring {
     type Message = super::sources::Message;
     type Performance = super::exporter::websocket::PerformancePoints;
 
     fn score_message(&self, message: Self::Message) -> Self::Performance {
         match message {
-            crate::sources::Message::Twitch { message, .. } => {
-                super::exporter::websocket::PerformancePoints::new(message.parse().unwrap())
+            crate::sources::Message::Twitch(_) => {
+                super::exporter::websocket::PerformancePoints::new(1.0)
             }
         }
     }
