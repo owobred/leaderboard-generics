@@ -63,7 +63,10 @@ async fn twitch_source_inner(mpsc_send: mpsc::Sender<TwitchMessage>) {
                     mpsc_send
                         .send(TwitchMessage {
                             message: message.message_text,
-                            author_id: message.sender.id,
+                            // FIXME: this should be the users id, I just changed it to make it wayy more clear in the web thing
+                            //        beacuse I'm too lazy to properly send this data over an api or something sane
+                            author_id: message.sender.login,
+                            // author_id: message.sender.id,
                         })
                         .await
                         .unwrap();
