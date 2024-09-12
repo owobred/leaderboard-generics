@@ -21,7 +21,7 @@ async fn main() {
     }
 
     let websocket_server = normal_leaderboards::exporter::websocket::UnstartedWebsocketServer::new(
-        std::collections::HashMap::from([(LeaderboardName::new("dummy"), Vec::new())]),
+        std::collections::HashMap::from([(LeaderboardName::new("message_count"), Vec::new())]),
     );
 
     let pipeline = Pipeline::builder()
@@ -31,7 +31,7 @@ async fn main() {
             MessageCountScoring::new(),
             MultiExporter::pair(
                 DummyExporter::new(),
-                websocket_server.get_exporter_for_leaderboard(LeaderboardName::new("dummy")),
+                websocket_server.get_exporter_for_leaderboard(LeaderboardName::new("message_count")),
             ),
         ))
         .build();
