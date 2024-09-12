@@ -1,5 +1,4 @@
 use lbo::{message::AuthoredMesasge, sources::Source};
-use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tracing::trace;
 use websocket_shared::{AuthorId, TwitchId};
