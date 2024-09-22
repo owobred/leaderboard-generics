@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Arc};
 
 use websocket_shared::{AuthorId, Elo, LeaderboardEloEntry, LeaderboardElos};
 
@@ -18,11 +18,11 @@ struct WorkingEntry {
 }
 
 pub struct EloProcessor {
-    base_leaderboard: LeaderboardElos,
+    base_leaderboard: Arc<LeaderboardElos>,
 }
 
 impl EloProcessor {
-    pub fn new(base_leaderboard: LeaderboardElos) -> Self {
+    pub fn new(base_leaderboard: Arc<LeaderboardElos>) -> Self {
         Self { base_leaderboard }
     }
 

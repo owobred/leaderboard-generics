@@ -1,6 +1,8 @@
+use std::sync::Arc;
+
 use lbo::{performances::StandardLeaderboard, Pipeline};
 use normal_leaderboards::{
-    exporter::{DummyExporter, MultiExporter},
+    exporter::{shared_processor::SharedHandle, DummyExporter, MultiExporter},
     filter::DummyFilter,
     scoring::MessageCountScoring,
     sources::TwitchMessageSourceHandle,
@@ -21,11 +23,13 @@ async fn main() {
             .init();
     }
 
+    let shared_handle = SharedHandle::new(Arc::new(std::collections::HashMap::from([(
+        LeaderboardName::new("message_count".to_string()),
+        Arc::new(LeaderboardElos::new(Vec::new())),
+    )])));
+
     let websocket_server = normal_leaderboards::exporter::websocket::UnstartedWebsocketServer::new(
-        std::collections::HashMap::from([(
-            LeaderboardName::new("message_count".to_string()),
-            LeaderboardElos::new(Vec::new()),
-        )]),
+        shared_handle.clone(),
     );
 
     let pipeline = Pipeline::builder()
@@ -35,7 +39,7 @@ async fn main() {
             MessageCountScoring::new(),
             MultiExporter::pair(
                 DummyExporter::new(),
-                websocket_server.get_exporter_for_leaderboard(LeaderboardName::new(
+                shared_handle.create_consumer_for_leaderboard(LeaderboardName::new(
                     "message_count".to_string(),
                 )),
             ),

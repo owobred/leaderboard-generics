@@ -1,5 +1,6 @@
-pub mod websocket;
 pub mod elo_calculator;
+pub mod shared_processor;
+pub mod websocket;
 
 use lbo::exporter::Exporter;
 use websocket::PerformancePoints;

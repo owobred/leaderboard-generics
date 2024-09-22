@@ -16,7 +16,7 @@ use websocket_shared::{
     LeaderboardPosistion, LeaderboardsChanges, OutgoingMessage,
 };
 
-use super::elo_calculator::EloProcessor;
+use super::{elo_calculator::EloProcessor, shared_processor::SharedHandle};
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(transparent)]
@@ -32,6 +32,10 @@ impl PerformancePoints {
 
     pub fn get(&self) -> f32 {
         self.0
+    }
+
+    pub const fn zero() -> Self {
+        Self(0.0)
     }
 }
 
@@ -55,64 +59,24 @@ pub type LeaderboardStates = Vec<LeaderboardStateEntry>;
 
 #[instrument(level = "trace", skip_all)]
 pub async fn turn_batched_performances_into_real_leaderboards(
-    mut incoming: mpsc::Receiver<FullBatchedPerformances>,
-    // base_leaderboards: HashMap<LeaderboardName, LeaderboardElos>,
-    leaderboards: Arc<RwLock<HashMap<LeaderboardName, LeaderboardElos>>>,
+    shared_processor: SharedHandle,
+    web_state: WebState,
     outgoing: mpsc::Sender<LeaderboardsChanges>,
 ) {
-    let base_leaderboards = leaderboards.read().await;
-    let elo_calculators: HashMap<LeaderboardName, EloProcessor> = HashMap::from_iter(
-        base_leaderboards
-            .clone()
-            .into_iter()
-            .map(|(key, value)| (key, EloProcessor::new(value))),
-    );
-    let mut all_current_performances: HashMap<LeaderboardName, LeaderboardPerformances> =
-        HashMap::from_iter(
-            base_leaderboards
-                .keys()
-                .map(|key| (key.to_owned(), LeaderboardPerformances::new())),
-        );
-    drop(base_leaderboards);
+    let mut previous_leaderboard_states = shared_processor.get_leaderboard().await;
+    let mut interval = tokio::time::interval(Duration::from_secs(5));
 
-    while let Some(mut batch) = incoming.recv().await {
-        trace!("got new batch");
-        let mut current_leaderboards = leaderboards.write().await;
-        let before = current_leaderboards.clone();
+    loop {
+        let new_leaderboard_states = shared_processor.get_leaderboard().await;
+        let changes = find_changes(&previous_leaderboard_states, &new_leaderboard_states);
 
-        for (leaderboard_name, leaderboard) in current_leaderboards.iter_mut() {
-            if let Some(changes) = batch.remove(leaderboard_name) {
-                let current_performances =
-                    all_current_performances.get_mut(leaderboard_name).unwrap();
-                for (author, delta) in changes {
-                    let score = current_performances
-                        .entry(author)
-                        .or_insert(PerformancePoints::new(0.0));
-                    *score = PerformancePoints::new(score.get() + delta.get());
-                }
+        outgoing.send(changes).await.unwrap();
+        let mut leaderboard_states_write = web_state.current_leaderboards_states.write().await;
+        *leaderboard_states_write = new_leaderboard_states.clone();
+        drop(leaderboard_states_write);
+        previous_leaderboard_states = new_leaderboard_states;
 
-                // This is a bit roundabout but I couldn't figure out how to let tokio's spawn_blocking
-                // hold a reference to a local reference nicely
-                // The important thing here is moving `EloProcessor::run()` outside of the async function
-                // so it doesn't block for a (relatively) long time
-                let (leaderboard_send, leaderboard_recv) = tokio::sync::oneshot::channel();
-                std::thread::scope(|s| {
-                    s.spawn(|| {
-                        let new_leaderboard =
-                            elo_calculators[leaderboard_name].run(current_performances);
-                        leaderboard_send.send(new_leaderboard).unwrap();
-                    });
-                });
-
-                let new_leaderboard = leaderboard_recv.await.unwrap();
-                *leaderboard = new_leaderboard;
-            }
-        }
-
-        trace!("finding changes");
-        let delta = find_changes(&before, &current_leaderboards);
-        trace!("found changes");
-        outgoing.send(delta).await.unwrap();
+        interval.tick().await;
     }
 }
 
@@ -234,23 +198,20 @@ impl WebServerHandle {
 }
 
 async fn run_webserver(
-    ingest_recv: mpsc::Receiver<IngestedPerformance>,
-    leaderboards_states: HashMap<LeaderboardName, LeaderboardElos>,
+    shared_processor: SharedHandle,
 ) -> WebServerHandle {
     let (serialized_send, serialized_recv) = broadcast::channel(10);
-    let current_leaderboards_states = Arc::new(RwLock::new(leaderboards_states));
+    let current_leaderboards_states = Arc::new(RwLock::new(shared_processor.get_leaderboard().await));
     let state = WebState {
         serialized_send: serialized_send.clone(),
         current_leaderboards_states: current_leaderboards_states.clone(),
     };
 
     let mut dependent_tasks = tokio::task::JoinSet::new();
-    let (batched_send, batched_recv) = mpsc::channel(10_000);
     let (changes_send, changes_recv) = mpsc::channel(10_000);
-    dependent_tasks.spawn(batch_performance_updates(ingest_recv, batched_send));
     dependent_tasks.spawn(turn_batched_performances_into_real_leaderboards(
-        batched_recv,
-        current_leaderboards_states.clone(),
+        shared_processor,
+        state.clone(),
         changes_send,
     ));
     dependent_tasks.spawn(serialize_changes(changes_recv, serialized_send));
@@ -288,7 +249,7 @@ async fn get_websocket(ws: WebSocketUpgrade, State(state): State<WebState>) -> i
 #[derive(Clone)]
 struct WebState {
     serialized_send: broadcast::Sender<Arc<SerializedOutgoingMessage>>,
-    current_leaderboards_states: Arc<RwLock<HashMap<LeaderboardName, LeaderboardElos>>>,
+    current_leaderboards_states: Arc<RwLock<Arc<HashMap<LeaderboardName, LeaderboardElos>>>>,
 }
 
 async fn handle_websocket(mut ws: WebSocket, state: WebState) {
@@ -302,7 +263,7 @@ async fn handle_websocket(mut ws: WebSocket, state: WebState) {
     // TODO: this should probably be stored somewhere to mitigate the effect on CPU usage if
     //       many clients connect at once
     let initial_state_serialized = serde_json::to_vec(&OutgoingMessage::InitialLeaderboards {
-        leaderboards: initial_state,
+        leaderboards: initial_state.as_ref().to_owned(),
     })
     .unwrap();
     ws.send(axum::extract::ws::Message::Binary(initial_state_serialized))
@@ -371,59 +332,32 @@ enum WebsocketMessageSide {
 }
 
 pub struct UnstartedWebsocketServer {
-    ingest_send: mpsc::Sender<IngestedPerformance>,
-    ingest_recv: mpsc::Receiver<IngestedPerformance>,
-    leaderboards: HashMap<LeaderboardName, LeaderboardElos>,
+    shared_processor: SharedHandle,
 }
 
 impl UnstartedWebsocketServer {
-    pub fn new(leaderboards: HashMap<LeaderboardName, LeaderboardElos>) -> Self {
-        let (ingest_send, ingest_recv) = mpsc::channel(10_000);
-
+    pub fn new(shared_processor: SharedHandle) -> Self {
         Self {
-            ingest_send,
-            ingest_recv,
-            leaderboards,
+            shared_processor
         }
     }
 
-    pub fn get_exporter_for_leaderboard(
-        &self,
-        leaderboard: LeaderboardName,
-    ) -> ServerHandleExporter {
-        if !self.leaderboards.contains_key(&leaderboard) {
-            panic!("leaderboard {leaderboard:?} is not loaded");
-            // TODO: this function should probably return a result or something instead of panicing
-        }
+    // pub fn get_exporter_for_leaderboard(
+    //     &self,
+    //     leaderboard: LeaderboardName,
+    // ) -> ServerHandleExporter {
+    //     if !self.leaderboards.contains_key(&leaderboard) {
+    //         panic!("leaderboard {leaderboard:?} is not loaded");
+    //         // TODO: this function should probably return a result or something instead of panicing
+    //     }
 
-        ServerHandleExporter {
-            leaderboard,
-            unbatched_send: self.ingest_send.clone(),
-        }
-    }
+    //     ServerHandleExporter {
+    //         leaderboard,
+    //         unbatched_send: self.ingest_send.clone(),
+    //     }
+    // }
 
     pub async fn start(self) -> WebServerHandle {
-        run_webserver(self.ingest_recv, self.leaderboards).await
-    }
-}
-
-pub struct ServerHandleExporter {
-    leaderboard: LeaderboardName,
-    unbatched_send: mpsc::Sender<IngestedPerformance>,
-}
-
-impl Exporter for ServerHandleExporter {
-    type Performance = PerformancePoints;
-    type AuthorId = AuthorId;
-
-    async fn export(&mut self, author_id: Self::AuthorId, performance: Self::Performance) {
-        self.unbatched_send
-            .send(IngestedPerformance {
-                leaderboard_name: self.leaderboard.clone(),
-                author_id,
-                performance,
-            })
-            .await
-            .unwrap();
+        run_webserver(self.shared_processor).await
     }
 }
