@@ -1,5 +1,6 @@
 use lbo::sources::Source;
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 use tracing::{trace, warn};
 
 use super::Message;
@@ -9,28 +10,28 @@ pub struct TwitchMessage {
     pub message: String,
     pub author_id: String,
 }
+
 pub struct TwitchMessageSourceHandle {
     mpsc_recv: mpsc::Receiver<TwitchMessage>,
     task_join: tokio::task::JoinHandle<()>,
+    cancellation_token: CancellationToken,
 }
 
 impl TwitchMessageSourceHandle {
-    pub fn spawn() -> Self {
+    pub fn spawn(channel: &'static str) -> Self {
+        let cancellation_token = CancellationToken::new();
         let (mpsc_send, mpsc_recv) = mpsc::channel(1000);
-        let task_join = tokio::task::spawn(twitch_source_inner(mpsc_send));
+        let task_join = tokio::task::spawn(twitch_source_inner(
+            mpsc_send,
+            channel,
+            cancellation_token.clone(),
+        ));
 
         Self {
             mpsc_recv,
             task_join,
+            cancellation_token,
         }
-    }
-
-    // TODO: There should probably be some kind of way to clean this up in the pipeline...
-    //       might be worth providing something like `Pipeline::cleanup(self)` which then calls async cleanup
-    //       on sub components
-    pub async fn cancel(self) {
-        drop(self.mpsc_recv);
-        self.task_join.abort();
     }
 }
 
@@ -46,24 +47,32 @@ impl Source for TwitchMessageSourceHandle {
     }
 
     async fn close(self) -> Self::Closed {
-        drop(self.mpsc_recv);
-
-        self.task_join.abort();
-
-        match self.task_join.await {
-            Ok(_) => (),
-            Err(error) => warn!(?error, "error whilst closing aborted twitch message source"),
-        }
+        self.cancellation_token.cancel();
+        self.task_join.await.unwrap();
     }
 }
 
-async fn twitch_source_inner(mpsc_send: mpsc::Sender<TwitchMessage>) {
+async fn twitch_source_inner(
+    mpsc_send: mpsc::Sender<TwitchMessage>,
+    channel: &str,
+    cancellation_token: CancellationToken,
+) {
     let config = twitch_irc::ClientConfig::default();
     let (mut incoming_message, client) =
         twitch_irc::TwitchIRCClient::<twitch_irc::SecureTCPTransport, _>::new(config);
 
     let jh = tokio::task::spawn(async move {
-        while let Some(message) = incoming_message.recv().await {
+        loop {
+            let message = tokio::select! {
+                message = incoming_message.recv() => message,
+                _ = cancellation_token.cancelled() => break,
+            };
+
+            let message = match message {
+                Some(message) => message,
+                None => break,
+            };
+
             match message {
                 twitch_irc::message::ServerMessage::Privmsg(message) => {
                     trace!(?message, "got irc message");
@@ -83,8 +92,7 @@ async fn twitch_source_inner(mpsc_send: mpsc::Sender<TwitchMessage>) {
         }
     });
 
-    // FIXME: this should be behind some kinda of config I beg of you
-    client.join("ironmouse".to_string()).unwrap();
+    client.join(channel.to_string()).unwrap();
 
     jh.await.unwrap()
 }

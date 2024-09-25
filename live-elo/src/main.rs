@@ -49,7 +49,7 @@ async fn main() {
     let pipeline = Pipeline::builder()
         .source(CancellableSource::new(
             TokioTaskSource::builder()
-                .add_source(TwitchMessageSourceHandle::spawn())
+                .add_source(TwitchMessageSourceHandle::spawn("ironmouse"))
                 .build(),
             cancellation_token,
         ))
