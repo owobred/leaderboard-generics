@@ -9,7 +9,7 @@ use axum::{
 use serde::Serialize;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tower_http::trace::TraceLayer;
-use tracing::{debug, info, instrument, trace};
+use tracing::{debug, info, instrument, trace, warn};
 use websocket_shared::{
     AuthorId, Elo, LeaderboardEloChanges, LeaderboardEloEntry, LeaderboardElos, LeaderboardName,
     LeaderboardPosistion, LeaderboardsChanges, OutgoingMessage,
@@ -191,7 +191,10 @@ impl WebServerHandle {
         self.server_task.abort();
 
         while let Some(result) = self.dependent_tasks.join_next().await {
-            result.unwrap();
+            match result {
+                Ok(_) => (),
+                Err(error) => warn!(?error, "subtask failed when joining"),
+            }
         }
     }
 }

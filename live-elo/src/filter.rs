@@ -14,8 +14,11 @@ impl<M> DummyFilter<M> {
 
 impl<M> Filter for DummyFilter<M> {
     type Message = M;
+    type Closed = ();
 
     fn keep(&self, _: &Self::Message) -> bool {
         true
     }
+
+    async fn close(self) -> Self::Closed {}
 }

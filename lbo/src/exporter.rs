@@ -1,6 +1,12 @@
 pub trait Exporter {
     type Performance;
     type AuthorId;
+    type Closed;
 
-    fn export(&mut self, author_id: Self::AuthorId, performance: Self::Performance) -> impl std::future::Future<Output = ()>;
+    fn export(
+        &mut self,
+        author_id: Self::AuthorId,
+        performance: Self::Performance,
+    ) -> impl std::future::Future<Output = ()>;
+    fn close(self) -> impl std::future::Future<Output = Self::Closed>;
 }

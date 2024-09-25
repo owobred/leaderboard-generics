@@ -5,8 +5,9 @@ use normal_leaderboards::{
     exporter::{shared_processor::SharedHandle, DummyExporter, MultiExporter},
     filter::DummyFilter,
     scoring::MessageCountScoring,
-    sources::TwitchMessageSourceHandle,
+    sources::{CancellableSource, TwitchMessageSourceHandle},
 };
+use tracing::{info, trace};
 use websocket_shared::{LeaderboardElos, LeaderboardName};
 
 #[tokio::main]
@@ -23,6 +24,19 @@ async fn main() {
             .init();
     }
 
+    let cancellation_token = tokio_util::sync::CancellationToken::new();
+
+    let cancellation_signal_task = {
+        let cancellation_token = cancellation_token.clone();
+
+        tokio::task::spawn(async move {
+            trace!("waiting for ctrl-c signal");
+            tokio::signal::ctrl_c().await.ok();
+            info!("info ctrl-c signal");
+            cancellation_token.cancel();
+        })
+    };
+
     let shared_handle = SharedHandle::new(Arc::new(std::collections::HashMap::from([(
         LeaderboardName::new("message_count".to_string()),
         Arc::new(LeaderboardElos::new(Vec::new())),
@@ -33,7 +47,10 @@ async fn main() {
     );
 
     let pipeline = Pipeline::builder()
-        .source(TwitchMessageSourceHandle::spawn())
+        .source(CancellableSource::new(
+            TwitchMessageSourceHandle::spawn(),
+            cancellation_token,
+        ))
         .filter(DummyFilter::new())
         .performances(StandardLeaderboard::new(
             MessageCountScoring::new(),
@@ -47,13 +64,11 @@ async fn main() {
         .build();
 
     let webserver_handle = websocket_server.start().await;
-    // tracing::debug!("sleeping");
-    // tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-    // tracing::debug!("sleep done");
-    pipeline.run().await.unwrap();
+    let pipeline = pipeline.run().await.unwrap();
     tracing::debug!("pipeline finished");
-    // tokio::time::sleep(std::time::Duration::from_secs(10)).await;
     webserver_handle.close().await;
+    pipeline.close().await;
     tracing::debug!("webserver handle finished");
-    // tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+
+    cancellation_signal_task.abort();
 }

@@ -114,12 +114,13 @@ pub struct SharedHandleConsumer {
 impl Exporter for SharedHandleConsumer {
     type Performance = PerformancePoints;
     type AuthorId = AuthorId;
+    type Closed = ();
 
-    async fn export(
-        &mut self,
-        author_id: Self::AuthorId,
-        performance: Self::Performance,
-    ) {
-        self.handle.push_performance_change(self.leaderboard.clone(), author_id, performance).await;
+    async fn export(&mut self, author_id: Self::AuthorId, performance: Self::Performance) {
+        self.handle
+            .push_performance_change(self.leaderboard.clone(), author_id, performance)
+            .await;
     }
+
+    async fn close(self) -> Self::Closed {}
 }

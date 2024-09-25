@@ -11,6 +11,7 @@ impl MessageCountScoring {
 impl ScoringSystem for MessageCountScoring {
     type Message = super::sources::Message;
     type Performance = super::exporter::websocket::PerformancePoints;
+    type Closed = ();
 
     fn score_message(&self, message: Self::Message) -> Self::Performance {
         match message {
@@ -19,4 +20,6 @@ impl ScoringSystem for MessageCountScoring {
             }
         }
     }
+
+    async fn close(self) -> Self::Closed {}
 }

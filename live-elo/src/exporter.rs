@@ -17,16 +17,19 @@ impl DummyExporter {
 impl Exporter for DummyExporter {
     type Performance = PerformancePoints;
     type AuthorId = AuthorId;
+    type Closed = ();
 
     async fn export(&mut self, author_id: Self::AuthorId, performance: Self::Performance) {
         println!("got performance for {author_id:?}: {performance:?}");
     }
+
+    async fn close(self) -> Self::Closed {}
 }
 
-pub struct MultiExporter<Head, Tail, Performance, AuthorId>
+pub struct MultiExporter<Head, Tail, Performance, AuthorId, HeadClosed, TailClosed>
 where
-    Head: Exporter<Performance = Performance, AuthorId = AuthorId>,
-    Tail: Exporter<Performance = Performance, AuthorId = AuthorId>,
+    Head: Exporter<Performance = Performance, AuthorId = AuthorId, Closed = HeadClosed>,
+    Tail: Exporter<Performance = Performance, AuthorId = AuthorId, Closed = TailClosed>,
     Performance: Clone,
     AuthorId: Clone,
 {
@@ -34,10 +37,11 @@ where
     tail: Tail,
 }
 
-impl<Head, Tail, Performance, AuthorId> MultiExporter<Head, Tail, Performance, AuthorId>
+impl<Head, Tail, Performance, AuthorId, HeadClosed, TailClosed>
+    MultiExporter<Head, Tail, Performance, AuthorId, HeadClosed, TailClosed>
 where
-    Head: Exporter<Performance = Performance, AuthorId = AuthorId>,
-    Tail: Exporter<Performance = Performance, AuthorId = AuthorId>,
+    Head: Exporter<Performance = Performance, AuthorId = AuthorId, Closed = HeadClosed>,
+    Tail: Exporter<Performance = Performance, AuthorId = AuthorId, Closed = TailClosed>,
     Performance: Clone,
     AuthorId: Clone,
 {
@@ -45,27 +49,35 @@ where
         Self { head, tail }
     }
 
-    pub fn append<T>(
+    pub fn append<T, C>(
         self,
         value: T,
-    ) -> MultiExporter<T, MultiExporter<Head, Tail, Performance, AuthorId>, Performance, AuthorId>
+    ) -> MultiExporter<
+        T,
+        MultiExporter<Head, Tail, Performance, AuthorId, HeadClosed, TailClosed>,
+        Performance,
+        AuthorId,
+        C,
+        ClosedMultiExporter<Head, Tail, Performance, AuthorId, HeadClosed, TailClosed>,
+    >
     where
-        T: Exporter<Performance = Performance, AuthorId = AuthorId>,
+        T: Exporter<Performance = Performance, AuthorId = AuthorId, Closed = C>,
     {
         MultiExporter::pair(value, self)
     }
 }
 
-impl<Head, Tail, Performance, AuthorId> Exporter
-    for MultiExporter<Head, Tail, Performance, AuthorId>
+impl<Head, Tail, Performance, AuthorId, HeadClosed, TailClosed> Exporter
+    for MultiExporter<Head, Tail, Performance, AuthorId, HeadClosed, TailClosed>
 where
-    Head: Exporter<Performance = Performance, AuthorId = AuthorId>,
-    Tail: Exporter<Performance = Performance, AuthorId = AuthorId>,
+    Head: Exporter<Performance = Performance, AuthorId = AuthorId, Closed = HeadClosed>,
+    Tail: Exporter<Performance = Performance, AuthorId = AuthorId, Closed = TailClosed>,
     Performance: Clone,
     AuthorId: Clone,
 {
     type Performance = Performance;
     type AuthorId = AuthorId;
+    type Closed = ClosedMultiExporter<Head, Tail, Performance, AuthorId, HeadClosed, TailClosed>;
 
     async fn export(&mut self, author_id: Self::AuthorId, performance: Self::Performance) {
         self.head
@@ -73,4 +85,24 @@ where
             .await;
         self.tail.export(author_id, performance).await;
     }
+
+    async fn close(self) -> Self::Closed {
+        ClosedMultiExporter {
+            head: self.head.close().await,
+            tail: self.tail.close().await,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+pub struct ClosedMultiExporter<Head, Tail, Performance, AuthorId, HeadClosed, TailClosed>
+where
+    Head: Exporter<Performance = Performance, AuthorId = AuthorId, Closed = HeadClosed>,
+    Tail: Exporter<Performance = Performance, AuthorId = AuthorId, Closed = TailClosed>,
+    Performance: Clone,
+    AuthorId: Clone,
+{
+    pub head: HeadClosed,
+    pub tail: TailClosed,
+    _phantom: std::marker::PhantomData<(Head, Tail)>,
 }
