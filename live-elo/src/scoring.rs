@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use lbo::scoring::ScoringSystem;
 
 pub struct MessageCountScoring {}
@@ -9,12 +11,12 @@ impl MessageCountScoring {
 }
 
 impl ScoringSystem for MessageCountScoring {
-    type Message = super::sources::Message;
+    type Message = Arc<super::sources::Message>;
     type Performance = super::exporter::websocket::PerformancePoints;
     type Closed = ();
 
     fn score_message(&self, message: Self::Message) -> Self::Performance {
-        match message {
+        match message.as_ref() {
             crate::sources::Message::Twitch(_) => {
                 super::exporter::websocket::PerformancePoints::new(1.0)
             }

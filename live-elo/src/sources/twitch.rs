@@ -40,10 +40,7 @@ impl Source for TwitchMessageSourceHandle {
     type Closed = ();
 
     async fn next_message(&mut self) -> Option<Self::Message> {
-        self.mpsc_recv
-            .recv()
-            .await
-            .map(Message::Twitch)
+        self.mpsc_recv.recv().await.map(Message::Twitch)
     }
 
     async fn close(self) -> Self::Closed {

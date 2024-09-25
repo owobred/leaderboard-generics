@@ -1,10 +1,13 @@
 use crate::{message::AuthoredMesasge, scoring::ScoringSystem};
 
-pub trait PerformanceProcessor {
+pub trait PerformanceProcessor: Send {
     type Message;
     type Closed;
 
-    fn process_message(&mut self, message: Self::Message) -> impl std::future::Future<Output = ()>;
+    fn process_message(
+        &mut self,
+        message: Self::Message,
+    ) -> impl std::future::Future<Output = ()> + Send;
     fn close(self) -> impl std::future::Future<Output = Self::Closed>;
 }
 
@@ -60,13 +63,11 @@ impl<Scoring, Exporter, Message, Id, Performance, ScoringClosed, ExporterClosed>
         ExporterClosed,
     >
 where
-    Message: AuthoredMesasge<Id = Id>,
+    Message: AuthoredMesasge<Id = Id> + Send,
     Scoring: ScoringSystem<Message = Message, Performance = Performance, Closed = ScoringClosed>,
-    Exporter: crate::exporter::Exporter<
-        AuthorId = Id,
-        Performance = Performance,
-        Closed = ExporterClosed,
-    >,
+    Exporter: crate::exporter::Exporter<AuthorId = Id, Performance = Performance, Closed = ExporterClosed>
+        + Send,
+    Scoring: Send,
 {
     type Message = Message;
     type Closed = ClosedStandardLeaderboard<

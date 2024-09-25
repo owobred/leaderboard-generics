@@ -40,10 +40,10 @@ where
 impl<Head, Tail, Performance, AuthorId, HeadClosed, TailClosed>
     MultiExporter<Head, Tail, Performance, AuthorId, HeadClosed, TailClosed>
 where
-    Head: Exporter<Performance = Performance, AuthorId = AuthorId, Closed = HeadClosed>,
-    Tail: Exporter<Performance = Performance, AuthorId = AuthorId, Closed = TailClosed>,
-    Performance: Clone,
-    AuthorId: Clone,
+    Head: Exporter<Performance = Performance, AuthorId = AuthorId, Closed = HeadClosed> + Send,
+    Tail: Exporter<Performance = Performance, AuthorId = AuthorId, Closed = TailClosed> + Send,
+    Performance: Clone + Send,
+    AuthorId: Clone + Send,
 {
     pub fn pair(head: Head, tail: Tail) -> Self {
         Self { head, tail }
@@ -61,7 +61,7 @@ where
         ClosedMultiExporter<Head, Tail, Performance, AuthorId, HeadClosed, TailClosed>,
     >
     where
-        T: Exporter<Performance = Performance, AuthorId = AuthorId, Closed = C>,
+        T: Exporter<Performance = Performance, AuthorId = AuthorId, Closed = C> + Send,
     {
         MultiExporter::pair(value, self)
     }
@@ -70,10 +70,10 @@ where
 impl<Head, Tail, Performance, AuthorId, HeadClosed, TailClosed> Exporter
     for MultiExporter<Head, Tail, Performance, AuthorId, HeadClosed, TailClosed>
 where
-    Head: Exporter<Performance = Performance, AuthorId = AuthorId, Closed = HeadClosed>,
-    Tail: Exporter<Performance = Performance, AuthorId = AuthorId, Closed = TailClosed>,
-    Performance: Clone,
-    AuthorId: Clone,
+    Head: Exporter<Performance = Performance, AuthorId = AuthorId, Closed = HeadClosed> + Send,
+    Tail: Exporter<Performance = Performance, AuthorId = AuthorId, Closed = TailClosed> + Send,
+    Performance: Clone + Send,
+    AuthorId: Clone + Send,
 {
     type Performance = Performance;
     type AuthorId = AuthorId;

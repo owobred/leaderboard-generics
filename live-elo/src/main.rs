@@ -4,6 +4,7 @@ use lbo::{performances::StandardLeaderboard, Pipeline};
 use normal_leaderboards::{
     exporter::{shared_processor::SharedHandle, DummyExporter, MultiExporter},
     filter::DummyFilter,
+    performances::FanoutPerformances,
     scoring::MessageCountScoring,
     sources::{twitch::TwitchMessageSourceHandle, CancellableSource, TokioTaskSource},
 };
@@ -54,15 +55,19 @@ async fn main() {
             cancellation_token,
         ))
         .filter(DummyFilter::new())
-        .performances(StandardLeaderboard::new(
-            MessageCountScoring::new(),
-            MultiExporter::pair(
-                DummyExporter::new(),
-                shared_handle.create_consumer_for_leaderboard(LeaderboardName::new(
-                    "message_count".to_string(),
-                )),
-            ),
-        ))
+        .performances(
+            FanoutPerformances::builder()
+                .add_performance_processor(StandardLeaderboard::new(
+                    MessageCountScoring::new(),
+                    MultiExporter::pair(
+                        DummyExporter::new(),
+                        shared_handle.create_consumer_for_leaderboard(LeaderboardName::new(
+                            "message_count".to_string(),
+                        )),
+                    ),
+                ))
+                .build(),
+        )
         .build();
 
     let webserver_handle = websocket_server.start().await;
