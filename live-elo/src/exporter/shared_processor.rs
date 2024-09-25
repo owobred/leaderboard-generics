@@ -33,7 +33,7 @@ impl SharedHandle {
         let value = self.current_leaderboard_data.load();
 
         match value.as_ref() {
-            Some(existing_value) => return existing_value.to_owned(),
+            Some(existing_value) => existing_value.to_owned(),
             None => {
                 // calculate elos and store in self.current_leaderboard_data
                 let mut leaderboards = HashMap::new();

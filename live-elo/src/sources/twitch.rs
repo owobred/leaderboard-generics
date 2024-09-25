@@ -43,7 +43,7 @@ impl Source for TwitchMessageSourceHandle {
         self.mpsc_recv
             .recv()
             .await
-            .map(|message| Message::Twitch(message))
+            .map(Message::Twitch)
     }
 
     async fn close(self) -> Self::Closed {
@@ -73,21 +73,18 @@ async fn twitch_source_inner(
                 None => break,
             };
 
-            match message {
-                twitch_irc::message::ServerMessage::Privmsg(message) => {
-                    trace!(?message, "got irc message");
-                    mpsc_send
-                        .send(TwitchMessage {
-                            message: message.message_text,
-                            // FIXME: this should be the users id, I just changed it to make it wayy more clear in the web thing
-                            //        beacuse I'm too lazy to properly send this data over an api or something sane
-                            author_id: message.sender.login,
-                            // author_id: message.sender.id,
-                        })
-                        .await
-                        .unwrap();
-                }
-                _ => (),
+            if let twitch_irc::message::ServerMessage::Privmsg(message) = message {
+                trace!(?message, "got irc message");
+                mpsc_send
+                    .send(TwitchMessage {
+                        message: message.message_text,
+                        // FIXME: this should be the users id, I just changed it to make it wayy more clear in the web thing
+                        //        beacuse I'm too lazy to properly send this data over an api or something sane
+                        author_id: message.sender.login,
+                        // author_id: message.sender.id,
+                    })
+                    .await
+                    .unwrap();
             }
         }
     });

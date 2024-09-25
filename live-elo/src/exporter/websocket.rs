@@ -103,11 +103,11 @@ pub async fn batch_performance_updates(
         let first = incoming.recv().await;
         trace!(?first, "got first message in batch");
 
-        if let None = first {
-            break;
-        }
+        let first = match first {
+            Some(first) => first,
+            None => break,
+        };
 
-        let first = first.unwrap();
         let mut read = Vec::new();
         read.push(first);
 
@@ -166,13 +166,12 @@ fn find_changes(
         let leaderboard_changes = changes
             .get_mut()
             .entry(name.to_owned())
-            .or_insert_with(|| LeaderboardEloChanges::new());
+            .or_insert_with(LeaderboardEloChanges::new);
         let now = to.get(name).unwrap();
 
         for (index, now_at) in now.iter().enumerate() {
             if before.get(index).map(|b| b != now_at).unwrap_or(true) {
-                leaderboard_changes
-                    .insert(LeaderboardPosistion::new(index), now_at.to_owned().into());
+                leaderboard_changes.insert(LeaderboardPosistion::new(index), now_at.to_owned());
             }
         }
     }
@@ -303,8 +302,8 @@ async fn handle_websocket(mut ws: WebSocket, state: WebState) {
 
     loop {
         let message = tokio::select! {
-            message = ws.recv() => message.map(|message| WebsocketMessageSide::FromWebsocket(message)),
-            message = batch_updater_recv.recv() => message.ok().map(|message| WebsocketMessageSide::ToWebsocket(message)),
+            message = ws.recv() => message.map(WebsocketMessageSide::FromWebsocket),
+            message = batch_updater_recv.recv() => message.ok().map(WebsocketMessageSide::ToWebsocket),
             _ = cancellation_token.cancelled() => break,
         };
 
