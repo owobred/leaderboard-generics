@@ -113,7 +113,10 @@ where
     cancellation_token: CancellationToken,
 }
 
-impl<S, M, C> CancellableSource<S, M, C> where S: Source<Message = M, Closed = C> {
+impl<S, M, C> CancellableSource<S, M, C>
+where
+    S: Source<Message = M, Closed = C>,
+{
     pub fn new(source: S, cancellation_token: CancellationToken) -> Self {
         Self {
             source,
