@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use lbo::{performances::StandardLeaderboard, Pipeline};
-use normal_leaderboards::{
+use live_elo::{
     exporter::{shared_processor::SharedHandle, DummyExporter, MultiExporter},
     filter::DummyFilter,
     performances::FanoutPerformances,
@@ -43,9 +43,8 @@ async fn main() {
         Arc::new(LeaderboardElos::new(Vec::new())),
     )])));
 
-    let websocket_server = normal_leaderboards::exporter::websocket::UnstartedWebsocketServer::new(
-        shared_handle.clone(),
-    );
+    let websocket_server =
+        live_elo::exporter::websocket::UnstartedWebsocketServer::new(shared_handle.clone());
 
     let pipeline = Pipeline::builder()
         .source(CancellableSource::new(
