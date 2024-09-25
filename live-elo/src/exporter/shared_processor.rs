@@ -7,7 +7,7 @@ use websocket_shared::{AuthorId, LeaderboardElos, LeaderboardName};
 
 use super::{elo_calculator::EloProcessor, websocket::PerformancePoints};
 
-// i don't like the name of this struct
+// TODO: i don't like the name of this struct
 #[derive(Clone)]
 pub struct SharedHandle {
     elo_processors: Arc<HashMap<LeaderboardName, EloProcessor>>,
