@@ -5,7 +5,7 @@ use normal_leaderboards::{
     exporter::{shared_processor::SharedHandle, DummyExporter, MultiExporter},
     filter::DummyFilter,
     scoring::MessageCountScoring,
-    sources::{twitch::TwitchMessageSourceHandle, CancellableSource},
+    sources::{twitch::TwitchMessageSourceHandle, CancellableSource, TokioTaskSource},
 };
 use tracing::{info, trace};
 use websocket_shared::{LeaderboardElos, LeaderboardName};
@@ -48,7 +48,9 @@ async fn main() {
 
     let pipeline = Pipeline::builder()
         .source(CancellableSource::new(
-            TwitchMessageSourceHandle::spawn(),
+            TokioTaskSource::builder()
+                .add_source(TwitchMessageSourceHandle::spawn())
+                .build(),
             cancellation_token,
         ))
         .filter(DummyFilter::new())
