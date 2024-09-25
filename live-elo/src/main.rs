@@ -5,7 +5,7 @@ use normal_leaderboards::{
     exporter::{shared_processor::SharedHandle, DummyExporter, MultiExporter},
     filter::DummyFilter,
     scoring::MessageCountScoring,
-    sources::{CancellableSource, TwitchMessageSourceHandle},
+    sources::{twitch::TwitchMessageSourceHandle, CancellableSource},
 };
 use tracing::{info, trace};
 use websocket_shared::{LeaderboardElos, LeaderboardName};
