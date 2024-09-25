@@ -6,7 +6,6 @@ use axum::{
     routing::get,
     Router,
 };
-use lbo::exporter::Exporter;
 use serde::Serialize;
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tower_http::trace::TraceLayer;
@@ -16,7 +15,7 @@ use websocket_shared::{
     LeaderboardPosistion, LeaderboardsChanges, OutgoingMessage,
 };
 
-use super::{elo_calculator::EloProcessor, shared_processor::SharedHandle};
+use super::shared_processor::SharedHandle;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(transparent)]
@@ -197,11 +196,10 @@ impl WebServerHandle {
     }
 }
 
-async fn run_webserver(
-    shared_processor: SharedHandle,
-) -> WebServerHandle {
+async fn run_webserver(shared_processor: SharedHandle) -> WebServerHandle {
     let (serialized_send, serialized_recv) = broadcast::channel(10);
-    let current_leaderboards_states = Arc::new(RwLock::new(shared_processor.get_leaderboard().await));
+    let current_leaderboards_states =
+        Arc::new(RwLock::new(shared_processor.get_leaderboard().await));
     let state = WebState {
         serialized_send: serialized_send.clone(),
         current_leaderboards_states: current_leaderboards_states.clone(),
@@ -337,9 +335,7 @@ pub struct UnstartedWebsocketServer {
 
 impl UnstartedWebsocketServer {
     pub fn new(shared_processor: SharedHandle) -> Self {
-        Self {
-            shared_processor
-        }
+        Self { shared_processor }
     }
 
     // pub fn get_exporter_for_leaderboard(
