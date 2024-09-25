@@ -10,7 +10,7 @@ The following tasks are loosely arranged by importance, with the most important 
     - Leaderboards are currently intialized as empty, which means that
         1. Elos are in a bit of a weird state, as everyone has the same elo so winning matches is entirely based on chance (no way to predict who is going to be against who).
         2. When the program exits, all state is thrown out.
-    - On the current version of the website, a bunch of user metadata is attached with performances. In my opinion, this is irrelevant to the data being stored - it would probably be a better idea to create a program that can export website-ready leaderboards (or leave this up to the `User state` point if the list, which could also handle filling this user state) 
+    - On the current version of the website, a bunch of user metadata is attached with performances. In my opinion, this is irrelevant to the data being stored - it would probably be a better idea to create a program that can export website-ready leaderboards (or leave this up to the `User state` point if the list, which could also handle filling this user state)
     - Implementation suggestions:
         - In `live-elo`, leaderboards need to be loaded before `UnstartedWebsocketServer` is initalized - ideally they are completely separated.
         - To do file saving, I'd suggest creating a new exporter / replacing `DummyExporter` with something like `FinalFileExporter`, which would collect performances during the run of the program, then save them when cancelled.
@@ -46,41 +46,6 @@ The following tasks are loosely arranged by importance, with the most important 
  - [ ] More leaderboards
     - The only existing leaderboard at the moment is the `message_count` leaderboard which just awards a user a fixed number of points for every message they send.
     - The current website has more leaderboards, which could probably be ported over relatively easily.
-    - (TODO: there is actually currently no way to have multiple leaderboards? I will work on this soon - it used to exist before I rewrote a lot of stuff)
-        - This will look something like:
-            ```rust
-            async fn main() {
-                let leaderboards = load_leaderboards().await;
-                let websocket_server = UnstartedWebsocketServer::new(leaderboards);
-
-                let pipeline = Pipeline::builder()
-                    .sources(
-                        SourceSet::builder()
-                            .add_source(...)
-                            .add_source(...)
-                            .build(),
-                    )
-                    .filter(...)
-                    .performances(
-                        FanoutLeaderboards::builder()
-                            .add_leaderboard(
-                                OverallScordingSystem::new(),
-                                MultiExporter::pair(
-                                    FileExporter::new(LeaderboardName::new("overall".to_string())),
-                                    websocket_server.get_exporter_for_leaderboard(LeaderboardName::new("overall".to_string()))
-                                )
-                            )
-                            .add_leaderboard(...)
-                            .build(),
-                )
-
-                let webserver_handle = websocket_server.start().await;
-
-                pipeline.run().await;
-                pipeline.cleanup().await;
-                websever_handle.close().await;
-            }
-            ```
     - Notes for adding existing leaderboards:
         - You'll probably need to make a few new forms of `AuthorId` for every platform.
         - For implementing the emotes leaderboard, you'll probably have to make another `Source` that takes in a stream of emotes from other sources. You'd probably have to either:
@@ -100,7 +65,7 @@ The following tasks are loosely arranged by importance, with the most important 
                         name: EmoteName,
                     }
 
-                    enum MyMessageType { 
+                    enum MyMessageType {
                         Emote(Emote),
                         ...,
                     }
