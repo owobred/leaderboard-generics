@@ -1,7 +1,7 @@
 use lbo::sources::Source;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use tracing::{trace, warn};
+use tracing::trace;
 
 use super::Message;
 

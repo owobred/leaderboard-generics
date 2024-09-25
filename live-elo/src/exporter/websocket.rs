@@ -8,6 +8,7 @@ use axum::{
 };
 use serde::Serialize;
 use tokio::sync::{broadcast, mpsc, RwLock};
+use tokio_util::sync::CancellationToken;
 use tower_http::trace::TraceLayer;
 use tracing::{debug, info, instrument, trace, warn};
 use websocket_shared::{
@@ -61,6 +62,7 @@ pub async fn turn_batched_performances_into_real_leaderboards(
     shared_processor: SharedHandle,
     web_state: WebState,
     outgoing: mpsc::Sender<LeaderboardsChanges>,
+    cancellation_token: CancellationToken,
 ) {
     let mut previous_leaderboard_states = shared_processor.get_leaderboard().await;
     let mut interval = tokio::time::interval(Duration::from_secs(5));
@@ -75,7 +77,10 @@ pub async fn turn_batched_performances_into_real_leaderboards(
         drop(leaderboard_states_write);
         previous_leaderboard_states = new_leaderboard_states;
 
-        interval.tick().await;
+        tokio::select! {
+            _ = interval.tick() => (),
+            _ = cancellation_token.cancelled() => break,
+        };
     }
 }
 
@@ -178,17 +183,14 @@ fn find_changes(
 pub struct WebServerHandle {
     server_task: tokio::task::JoinHandle<Result<(), std::io::Error>>,
     dependent_tasks: tokio::task::JoinSet<()>,
-    state: WebState,
-    // This needs to be here because otherwise the channel will close
-    serialized_recv: broadcast::Receiver<Arc<SerializedOutgoingMessage>>,
+    // This needs to be here because otherwise the channel will close before any websockets connect
+    _serialized_recv: broadcast::Receiver<Arc<SerializedOutgoingMessage>>,
+    cancellation_token: CancellationToken,
 }
 
 impl WebServerHandle {
     pub async fn close(mut self) {
-        drop(self.state);
-        drop(self.serialized_recv);
-        // TODO: there might be a better way to gracefully shut down the web server?
-        self.server_task.abort();
+        self.cancellation_token.cancel();
 
         while let Some(result) = self.dependent_tasks.join_next().await {
             match result {
@@ -196,16 +198,26 @@ impl WebServerHandle {
                 Err(error) => warn!(?error, "subtask failed when joining"),
             }
         }
+
+        match self.server_task.await {
+            Ok(_) => (),
+            Err(error) => warn!(?error, "server task failed to join"),
+        }
     }
 }
 
-async fn run_webserver(shared_processor: SharedHandle) -> WebServerHandle {
+async fn run_webserver(
+    shared_processor: SharedHandle,
+    cancellation_token: CancellationToken,
+) -> WebServerHandle {
     let (serialized_send, serialized_recv) = broadcast::channel(10);
     let current_leaderboards_states =
         Arc::new(RwLock::new(shared_processor.get_leaderboard().await));
+
     let state = WebState {
         serialized_send: serialized_send.clone(),
         current_leaderboards_states: current_leaderboards_states.clone(),
+        cancellation_token: cancellation_token.clone(),
     };
 
     let mut dependent_tasks = tokio::task::JoinSet::new();
@@ -214,8 +226,13 @@ async fn run_webserver(shared_processor: SharedHandle) -> WebServerHandle {
         shared_processor,
         state.clone(),
         changes_send,
+        cancellation_token.clone(),
     ));
-    dependent_tasks.spawn(serialize_changes(changes_recv, serialized_send));
+    dependent_tasks.spawn(serialize_changes(
+        changes_recv,
+        serialized_send,
+        cancellation_token.clone(),
+    ));
 
     let router = Router::new()
         .layer(TraceLayer::new_for_http())
@@ -225,18 +242,28 @@ async fn run_webserver(shared_processor: SharedHandle) -> WebServerHandle {
     let listener = tokio::net::TcpListener::bind("localhost:8000")
         .await
         .unwrap();
-    let webserver_task = tokio::task::spawn(async move {
-        let local_addr = listener.local_addr().unwrap();
-        info!(?local_addr, "starting listener");
-        axum::serve(listener, router).await
-    });
+
+    let webserver_task = {
+        let cancellation_token = cancellation_token.clone();
+        tokio::task::spawn(async move {
+            let local_addr = listener.local_addr().unwrap();
+            info!(?local_addr, "starting listener");
+            axum::serve(listener, router)
+                .with_graceful_shutdown(cancel_token_wrapper(cancellation_token))
+                .await
+        })
+    };
 
     WebServerHandle {
         server_task: webserver_task,
         dependent_tasks,
-        state,
-        serialized_recv,
+        _serialized_recv: serialized_recv,
+        cancellation_token,
     }
+}
+
+async fn cancel_token_wrapper(cancellation_token: CancellationToken) {
+    cancellation_token.cancelled().await;
 }
 
 async fn get_websocket(ws: WebSocketUpgrade, State(state): State<WebState>) -> impl IntoResponse {
@@ -251,6 +278,7 @@ async fn get_websocket(ws: WebSocketUpgrade, State(state): State<WebState>) -> i
 struct WebState {
     serialized_send: broadcast::Sender<Arc<SerializedOutgoingMessage>>,
     current_leaderboards_states: Arc<RwLock<Arc<HashMap<LeaderboardName, LeaderboardElos>>>>,
+    cancellation_token: CancellationToken,
 }
 
 async fn handle_websocket(mut ws: WebSocket, state: WebState) {
@@ -271,10 +299,13 @@ async fn handle_websocket(mut ws: WebSocket, state: WebState) {
         .await
         .unwrap();
 
+    let cancellation_token = state.cancellation_token.clone();
+
     loop {
         let message = tokio::select! {
             message = ws.recv() => message.map(|message| WebsocketMessageSide::FromWebsocket(message)),
             message = batch_updater_recv.recv() => message.ok().map(|message| WebsocketMessageSide::ToWebsocket(message)),
+            _ = cancellation_token.cancelled() => break,
         };
 
         if let None = message {
@@ -320,8 +351,19 @@ type SerializedOutgoingMessage = Vec<u8>;
 async fn serialize_changes(
     mut incoming: mpsc::Receiver<LeaderboardsChanges>,
     outgoing: broadcast::Sender<Arc<SerializedOutgoingMessage>>,
+    cancellation_token: CancellationToken,
 ) {
-    while let Some(changes) = incoming.recv().await {
+    loop {
+        let changes = tokio::select! {
+            changes = incoming.recv() => changes,
+            _ = cancellation_token.cancelled() => None,
+        };
+
+        let changes = match changes {
+            Some(changes) => changes,
+            None => break,
+        };
+
         let serialized = serde_json::to_vec(&OutgoingMessage::Changes { changes }).unwrap();
         outgoing.send(Arc::new(serialized)).unwrap();
     }
@@ -341,22 +383,7 @@ impl UnstartedWebsocketServer {
         Self { shared_processor }
     }
 
-    // pub fn get_exporter_for_leaderboard(
-    //     &self,
-    //     leaderboard: LeaderboardName,
-    // ) -> ServerHandleExporter {
-    //     if !self.leaderboards.contains_key(&leaderboard) {
-    //         panic!("leaderboard {leaderboard:?} is not loaded");
-    //         // TODO: this function should probably return a result or something instead of panicing
-    //     }
-
-    //     ServerHandleExporter {
-    //         leaderboard,
-    //         unbatched_send: self.ingest_send.clone(),
-    //     }
-    // }
-
     pub async fn start(self) -> WebServerHandle {
-        run_webserver(self.shared_processor).await
+        run_webserver(self.shared_processor, CancellationToken::new()).await
     }
 }
